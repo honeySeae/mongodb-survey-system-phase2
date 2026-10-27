@@ -1,4 +1,4 @@
-# 问卷系统数据库设计（第一阶段）
+# 问卷系统数据库设计（第一阶段 + 第二阶段）
 
 > 数据库：MongoDB。所有数据存储在 MongoDB 中，不使用关系数据库。
 
@@ -9,6 +9,8 @@
 | `users` | 用户账号（创建者和填写者是同一种用户） | 一个用户 |
 | `surveys` | 问卷，**题目嵌入其中** | 一份问卷 |
 | `responses` | 填写结果 | 一次提交 |
+| `questions` | 第二阶段新增：可复用的题目（见第十节） | 一道题的一个版本 |
+| `questionBanks` | 第二阶段新增：题库（见第十节） | 一个题库 |
 
 同一个用户既可以创建问卷，也可以填写别人的问卷。他与某份问卷的关系由 `surveys.ownerId`（创建者）和 `responses.respondentId`（填写者）表示，不区分用户类型。
 
@@ -534,7 +536,194 @@ logic: {
 
 ---
 
-## 十、修订记录
+## 十、第二阶段：题目复用、版本、共享与题库
+
+> 需求原文见 `docs/REQUIREMENTS_PHASE2.md`。本节的设计决定由开发者做出（2026-10-28）；标“待确认”的细节在实现到相关部分前与开发者确认后补全。
+
+### 10.1 总体思路
+
+| 需求 | 设计 |
+|---|---|
+| 保存常用题目、在多份问卷中使用 | 新集合 `questions`：题目独立于问卷保存；问卷使用时**复制快照**进 `surveys.questions`，用 `source` 记录来源版本 |
+| 修改题目不影响已做好的问卷 | 问卷里是副本，修改题目永远不会改动问卷；被问卷用过的版本锁定，只能派生新版本 |
+| 修改历史、恢复旧版本、多版本并存 | `questions` 中**每个版本一个文档**，`parentId` 记录从哪个版本改来，`rootId` 记录属于哪道题 |
+| 共享给别人 | 版本上记录共享设置，以“自己在这道题下的所有版本”为单位共享；可指定用户或公开 |
+| 查看被哪些问卷使用 | 按 `surveys.questions.source` 查询（有索引） |
+| 题库 | 新集合 `questionBanks`，每一项引用一个固定版本 |
+| 单题跨问卷统计 | 按 `source.rootId` 找到使用这道题的问卷，在 `responses` 上聚合 |
+| 兼容第一阶段 | 旧问卷、旧答卷**不迁移**；没有 `source` 的题就是问卷里自建的题，所有功能照旧 |
+
+**为什么问卷里存副本而不是只存引用**：
+- 填写、校验、跳转、统计（第一阶段的全部代码）都只读问卷文档，副本让这些代码完全不用改，一次查询拿到整份问卷的做法也保持不变（见第七节第 1 条）。
+- 已发布问卷的内容天然不会因为题目修改而改变（需求三），不需要靠程序到处检查。
+- 第一阶段第七节第 1 条已预留：“将来可新增题库集合，复制嵌入，原结构不变”。
+- 代价：同一内容存了多份。题目很小，可接受；`source` 保留了与原版本的联系，用于“被哪些问卷使用”和跨问卷统计。
+
+### 10.2 questions（题目版本）
+
+每个文档是一道题的**一个版本**。
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `_id` | ObjectId | 是 | 版本 id |
+| `rootId` | ObjectId | 是 | 属于哪道题：等于这道题最初那个版本的 `_id`（v1 的 `rootId` 就是它自己的 `_id`） |
+| `parentId` | ObjectId | 否 | 从哪个版本改来；v1 为 `null` |
+| `restoredFrom` | ObjectId | 否 | 恢复旧版本时，内容来自哪个版本；普通版本没有该字段（或为 `null`） |
+| `version` | Number | 是 | 版本号（编号规则待确认，见 10.9） |
+| `ownerId` | ObjectId | 是 | 这个版本的所有者（创建它的人）。同一道题的不同版本可能属于不同的人 |
+| `type` | String | 是 | 同第一阶段 3.1；**同一道题（同一 `rootId`）的所有版本题型相同** |
+| `title` | String | 是 | 同第一阶段 3.1 |
+| `options` | Array | 选择题必填 | `[{id, text}]`，同第一阶段 3.1；选项 id 跨版本保持不变（见 10.4） |
+| `validation` | Object | 是 | 同第一阶段 3.2，但**不含 `required`**（是否必答由问卷决定） |
+| `sharing` | Object | 是 | `{ public: Boolean, userIds: [ObjectId] }`，默认 `{public: false, userIds: []}`（见 10.6） |
+| `createdAt` / `updatedAt` | Date | 是 | |
+
+题目内容（`type`、`title`、`options`、`validation`）的检查复用第一阶段 `app/logic/question_rules.py`，只是 `validation` 中不允许出现 `required`。题库中的题**不存跳转规则**（跳转引用问卷里的其他题，只在问卷中有意义）。
+
+```js
+// “你的年龄”这道题的三个版本：v1 → v2 → v3
+{ _id: ObjectId("A1"), rootId: ObjectId("A1"), parentId: null, version: 1, ownerId: ObjectId("U1"),
+  type: "number", title: "你的年龄", validation: { min: 0, max: 150, integerOnly: true },
+  sharing: { public: false, userIds: [ObjectId("U2")] }, createdAt: ..., updatedAt: ... }
+{ _id: ObjectId("A2"), rootId: ObjectId("A1"), parentId: ObjectId("A1"), version: 2, ownerId: ObjectId("U1"),
+  type: "number", title: "你的年龄（周岁）", validation: { min: 0, max: 120, integerOnly: true },
+  sharing: { public: false, userIds: [ObjectId("U2")] }, ... }        // 继承 U1 在这道题上的共享设置
+{ _id: ObjectId("A3"), rootId: ObjectId("A1"), parentId: ObjectId("A2"), restoredFrom: ObjectId("A1"),
+  version: 3, ownerId: ObjectId("U1"), type: "number", title: "你的年龄",   // 恢复 v1 的内容
+  validation: { min: 0, max: 150, integerOnly: true }, ... }
+```
+
+### 10.3 surveys.questions[].source（问卷中的题来自哪个版本）
+
+问卷题目结构（第一阶段 3.1）不变，**新增可选字段** `source`：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `source.questionId` | ObjectId | 来源版本的 `questions._id` |
+| `source.rootId` | ObjectId | 来源题目的 `rootId`（冗余，用于按题统计、按题查使用情况、检查同一道题只出现一次，不必先查 `questions`） |
+| `source.version` | Number | 来源版本号（冗余，用于列表展示） |
+
+- 没有 `source`：问卷里自建的题（包括第一阶段的所有题），行为与第一阶段完全相同。
+- 有 `source`：`type`、`title`、`options`、`validation`（除 `required`）是来源版本的**副本**，不能在问卷里直接修改；问卷自己决定 `validation.required` 和 `logic`（跳转规则）。
+- 冗余字段不会不一致：被问卷用过的版本已锁定，`rootId`、`version` 本身也永不改变。
+- 问卷中题目的 `id`（`q_xxxxxx`）仍由问卷生成，跳转规则和答卷照旧引用它；选项 id 直接沿用来源版本的选项 id（跨问卷统计按选项 id 合并）。
+- **同一份问卷里，同一道题（同一 `source.rootId`）只能出现一次**。
+
+```js
+{
+  id: "q_k3x9ab", type: "number", title: "你的年龄",
+  validation: { required: true, min: 0, max: 150, integerOnly: true },   // required 由问卷决定
+  logic: { rules: [ { when: { op: "lt", value: 18 }, goto: "END" } ], defaultNext: null },
+  source: { questionId: ObjectId("A1"), rootId: ObjectId("A1"), version: 1 }
+}
+```
+
+### 10.4 版本规则
+
+1. **创建题目**：生成 v1，`rootId = _id`，`parentId = null`，所有者为创建者，默认不共享。
+2. **锁定**：被任何问卷用过的版本锁定，只能基于它创建新版本；没被用过的版本，所有者可以直接修改，也可以另存为新版本。（“用过”的判定和是否解锁待确认，见 10.9）
+3. **创建新版本**（基于某个版本修改）：
+   - 新版本的 `parentId` = 被修改的版本，`rootId` 相同，所有者是创建新版本的人。
+   - **题型不能改**；要换题型就新建一道题。
+   - **选项 id 保持不变**：没改的选项（包括只改了文字的选项）沿用原 id，新增的选项才生成新 id，删除的选项不再出现。这样跨版本统计可以按选项 id 合并。
+4. **直接修改未用过的版本**：只有所有者可以；同样不能改题型，选项 id 规则同上。
+5. **恢复旧版本**：把旧版本的内容复制成一个**新版本**；`parentId` 放在当前版本后面，`restoredFrom` 记录内容来自哪个旧版本。旧版本本身不变。
+6. **不设全局的“当前版本”**：同一道题的多个版本同时存在，使用时由用户自己选（需求五：A 问卷用旧题、B 问卷用新题）。
+7. **历史**：同一 `rootId` 的所有版本，通过 `parentId` 组成一棵树（不一定是一条链：可以从 v1 同时派生 v2、v3），`restoredFrom` 另外标出恢复关系。
+
+### 10.5 问卷使用题目
+
+- **添加到问卷**：把某个版本的内容复制进问卷题目数组，记录 `source`；问卷另设 `required`，跳转规则添加后再设（与第一阶段“添加题目时不接受跳转规则”一致）。
+- 只有草稿可以添加、修改、删除题目（第一阶段 6.4 不变）。
+- 来自题库的题，内容和校验不能在问卷里直接改，只能改 `required` 和跳转规则；其他照第一阶段处理（排序、删除、引用检查、整体检查）。
+- **保留在问卷里直接建题的功能**（第一阶段接口不变）。
+- **把问卷里的题存进题库**：用问卷题目的内容生成一道新题 v1（`validation` 去掉 `required`，不含跳转规则），**选项 id 沿用**；并给原问卷的这道题补上 `source`，**不改动题目内容**。已发布、已关闭的问卷也可以这样做（只是补充来源信息，题目内容和答卷都不变）。已有 `source` 的题不能再存。
+
+### 10.6 共享
+
+- 可以共享给指定用户（`sharing.userIds`），也可以设为公开（`sharing.public`）。
+- **以整道题为单位共享**：共享的是“自己在这道题下的所有版本”。设置共享时，同时更新该用户在这个 `rootId` 下的所有版本的 `sharing`。
+- 基于自己的版本创建的新版本**继承**自己在这道题上的共享设置。
+- 别人基于共享的版本改出的新版本属于别人（`ownerId` 是别人），**默认不共享**。
+- 被共享的人只能：查看、在自己的问卷中使用、基于它创建自己的新版本；**不能直接修改**，也不能修改共享设置。
+- 取消共享不影响已经复制进别人问卷的题（问卷里是副本）。
+
+### 10.7 questionBanks（题库）
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `_id` | ObjectId | 是 | |
+| `ownerId` | ObjectId | 是 | 创建者，只有创建者能修改题库 |
+| `name` | String | 是 | 名称 |
+| `description` | String | 否 | 说明，未填写时存空字符串 |
+| `items` | Array | 是 | `[{ questionId, rootId, addedAt }]`，每一项是一个**固定的版本**；`rootId` 冗余，用于“换成这道题的其他版本” |
+| `sharing` | Object | 是 | `{ public: Boolean, userIds: [ObjectId] }`，默认不共享 |
+| `createdAt` / `updatedAt` | Date | 是 | |
+
+- 题库只存版本的引用，不复制内容：题库不是问卷，题库中的题被选进问卷时才复制快照。
+- 题库的创建者可以手动把某一项换成这道题（同一 `rootId`）的其他版本；不会自动跟随新版本。
+- 题库可以共享给指定用户或公开；共享后别人可以使用题库里的这些版本；只有创建者能修改题库（名称、说明、条目、共享设置）。
+
+```js
+{
+  _id: ObjectId("..."), ownerId: ObjectId("U1"),
+  name: "学生基本信息", description: "每学期调查都会用到的题",
+  items: [ { questionId: ObjectId("A2"), rootId: ObjectId("A1"), addedAt: ISODate("...") } ],
+  sharing: { public: true, userIds: [] },
+  createdAt: ISODate("..."), updatedAt: ISODate("...")
+}
+```
+
+### 10.8 被哪些问卷使用、跨问卷统计
+
+**被哪些问卷使用**（按版本 `source.questionId` 或按整道题 `source.rootId` 查询）：
+- 自己的问卷：显示标题、状态、链接。
+- 别人的问卷：只显示数量。
+
+**单题跨问卷统计**：
+- 只统计**自己的**问卷中使用这道题的题目。
+- 默认合并同一道题的所有版本（按 `source.rootId`），可以按版本筛选。
+- 每份问卷按它自己的提交策略选答卷（复用第一阶段 `scope_filter`）。
+- **不显示填写人**（无论问卷是否匿名）。
+- 结果包括合并后的总体数据和每份问卷各自的数据；各题型的统计内容与第一阶段 6.7 相同（单选/多选按选项 id 合并，数字题给出总体平均值）。
+- 只依赖 `surveys.questions.source`：旧问卷里的题补上 `source`（10.5）之后，它的旧答卷也会计入。
+
+### 10.9 待确认
+
+实现到相关部分前与开发者确认，确认后补入上文并删除本条：版本号编号方式、恢复时“当前版本”指什么、锁定的判定（草稿是否算用过、是否解锁、存字段还是实时查询）、共享设置的存储与同步方式、题库共享授予的权限范围、删除规则（题目版本、题库、问卷）、选项 id 在问卷内冲突时的处理、问卷里来自题库的题能否换版本、跨问卷统计的细节（选项文字取哪个版本、作答人数是否跨问卷去重、包含哪些状态的问卷）、各操作的权限检查。
+
+### 10.10 新增索引
+
+| 集合 | 索引 | 用途 |
+|---|---|---|
+| questions | `{rootId: 1, version: 1}` 唯一 | 一道题的全部版本（历史）；保证版本号不重复 |
+| questions | `{ownerId: 1, updatedAt: -1}` | “我的题目”列表 |
+| questions | `{"sharing.userIds": 1}` | 共享给我的题目 |
+| questions | `{"sharing.public": 1}` 部分索引 `sharing.public: true` | 公开的题目 |
+| surveys | `{"questions.source.questionId": 1}` | 某个版本被哪些问卷使用；锁定判断 |
+| surveys | `{"questions.source.rootId": 1, ownerId: 1}` | 某道题被哪些问卷使用；跨问卷统计找自己的问卷 |
+| questionBanks | `{ownerId: 1, updatedAt: -1}` | 我的题库 |
+| questionBanks | `{"sharing.userIds": 1}` | 共享给我的题库 |
+| questionBanks | `{"sharing.public": 1}` 部分索引 `sharing.public: true` | 公开的题库 |
+| questionBanks | `{"items.questionId": 1}` | 某个版本在哪些题库中 |
+
+`$jsonSchema`：`questions`、`questionBanks` 按第一阶段 5.1 的策略只约束核心字段（必填、类型、枚举），不设 `additionalProperties: false`，`validationLevel: "moderate"`。`surveys` 的校验规则不变（`source` 是可选字段）。
+
+### 10.11 与第一阶段的兼容
+
+| 方面 | 原设计 | 第二阶段 | 兼容性 |
+|---|---|---|---|
+| 集合 | `users`、`surveys`、`responses` | 新增 `questions`、`questionBanks` | 原集合结构不变 |
+| 问卷题目 | 题目只嵌入问卷 | 仍嵌入问卷；新增可选字段 `source` | 旧题没有 `source` = 问卷自建的题，不迁移 |
+| 答卷 | `answers` 引用问卷题目 id | 不变 | 旧答卷不迁移，统计、列表照旧 |
+| 填写、校验、跳转、单份问卷统计 | 只读问卷文档 | 不变（问卷里是副本） | 代码无需修改 |
+| 问卷中直接建题 | 支持 | 保留 | 接口不变 |
+| 编辑题目 | 草稿可改全部内容 | 有 `source` 的题只能改 `required`、跳转规则 | 没有 `source` 的题行为不变 |
+| `surveys.version` | 为“修改已发布问卷”预留 | 本阶段未使用 | 不变 |
+
+---
+
+## 十一、修订记录
 
 | 日期 | 修订内容 | 来源 |
 |---|---|---|
@@ -547,3 +736,4 @@ logic: {
 | 2026-10-19 | **6.2 修正第 ③ 步冲突处理**：原设计为“冲突时返回 409”，但此时第 ① 步的答卷已存入，`all` 策略下用户重交会被算两次；改为先删除刚插入的答卷再返回 409，使 409 表示“没有保存”（详见 6.2“第 ③ 步冲突处理的修正”）。另：6.1 填写者看不到跳转规则和内部字段；6.2 补充 surveyVersion、保存规范化后的答案、latest 预填、200 项上限；6.4 增加填写者访问问卷的各种情况表 | 第七步实现前 Claude Code 发现并提出，开发者确认（见 AI_LOG 第 18 条） |
 | 2026-10-19 | 新增 6.8 统计聚合管道（四种题型的管道、匿名处理、answers 数组结构如何简化管道）；6.1 补充用户名在管道中用 $lookup 取得、匿名管道不含该步；6.7 补充实现约定（口径一处定义、全部选项含 0、整份统计列 20 条、单题分页、一题一个查询、答卷列表口径一致） | 第八步，开发者确认；6.8 应开发者要求在测试通过后编写（见 AI_LOG 第 19 条） |
 | 2026-10-22 | 第三节 shortCode 补充例外：示例数据脚本为示例问卷指定固定链接代码 `Food26`（仅脚本可用，接口不接受，已被占用时报错不覆盖）；数据结构不变 | 开发者要求示例问卷链接固定（见 AI_LOG 第 32 条） |
+| 2026-10-28 | **第二阶段**：新增第十节（`questions` 题目版本集合、`questionBanks` 题库集合、问卷题目新增可选字段 `source`、版本/共享/题库/使用情况/跨问卷统计的规则、新增索引、与第一阶段的兼容）；第一节集合总览增加两个新集合；原第十节修订记录改为第十一节。10.9 列出待确认事项 | 开发者的第二阶段设计决定，Claude Code 整理成文 |
