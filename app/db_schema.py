@@ -1,4 +1,4 @@
-"""集合的 $jsonSchema 校验和索引定义（对应 docs/DATABASE_DESIGN.md 第 2~5 节）。
+"""集合的 $jsonSchema 校验和索引定义（对应 docs/DATABASE_DESIGN.md 第 2~5 节；第二阶段见 10.10）。
 
 ensure_schema() 是幂等的：集合不存在则创建，已存在则用 collMod 更新校验规则；
 索引已存在则跳过。应用启动和 scripts/init_db.py 都会调用它。
@@ -11,7 +11,7 @@ ensure_schema() 是幂等的：集合不存在则创建，已存在则用 collMo
 from pymongo import ASCENDING, DESCENDING, IndexModel
 from pymongo.database import Database
 
-from app.db import RESPONSES, SURVEYS, USERS
+from app.db import QUESTION_BANKS, QUESTIONS, RESPONSES, SURVEYS, USERS
 
 # ---------- 取值枚举（与设计文档一致，供应用层复用） ----------
 SURVEY_STATUSES = ["draft", "published", "closed"]
@@ -51,6 +51,16 @@ _QUESTION_SCHEMA = {
         "options": {"bsonType": "array", "items": _OPTION_SCHEMA},
         "validation": {"bsonType": "object"},
         "logic": {"bsonType": "object"},
+        # 第二阶段：来自题库的题记录来源版本（10.3）；可选，第一阶段的题没有该字段
+        "source": {
+            "bsonType": "object",
+            "required": ["questionId", "rootId", "version"],
+            "properties": {
+                "questionId": {"bsonType": "objectId"},
+                "rootId": {"bsonType": "objectId"},
+                "version": {"bsonType": _INT, "minimum": 1},
+            },
+        },
     },
 }
 
@@ -107,10 +117,71 @@ RESPONSES_SCHEMA = {
     },
 }
 
+# ---------- 第二阶段（设计文档 10.2、10.7） ----------
+_SHARING_SCHEMA = {
+    "bsonType": "object",
+    "required": ["public", "userIds"],
+    "properties": {
+        "public": {"bsonType": "bool"},
+        "userIds": {"bsonType": "array", "items": {"bsonType": "objectId"}},
+    },
+}
+
+QUESTIONS_SCHEMA = {
+    "bsonType": "object",
+    "required": [
+        "rootId", "version", "ownerId", "type", "title", "validation",
+        "sharing", "createdAt", "updatedAt",
+    ],
+    "properties": {
+        "rootId": {"bsonType": "objectId"},
+        "parentId": {"bsonType": ["objectId", "null"]},
+        "restoredFrom": {"bsonType": ["objectId", "null"]},
+        "version": {"bsonType": _INT, "minimum": 1},
+        "ownerId": {"bsonType": "objectId"},
+        "type": {"enum": QUESTION_TYPES},
+        "title": {"bsonType": "string", "minLength": 1},
+        "options": {"bsonType": "array", "items": _OPTION_SCHEMA},
+        # 是否必答由问卷决定，题目版本中不存 required
+        "validation": {"bsonType": "object", "not": {"required": ["required"]}},
+        "sharing": _SHARING_SCHEMA,
+        "lockedAt": {"bsonType": ["date", "null"]},
+        "createdAt": {"bsonType": "date"},
+        "updatedAt": {"bsonType": "date"},
+    },
+}
+
+QUESTION_BANKS_SCHEMA = {
+    "bsonType": "object",
+    "required": ["ownerId", "name", "items", "sharing", "createdAt", "updatedAt"],
+    "properties": {
+        "ownerId": {"bsonType": "objectId"},
+        "name": {"bsonType": "string", "minLength": 1},
+        "description": {"bsonType": "string"},
+        "items": {
+            "bsonType": "array",
+            "items": {
+                "bsonType": "object",
+                "required": ["questionId", "rootId", "addedAt"],
+                "properties": {
+                    "questionId": {"bsonType": "objectId"},
+                    "rootId": {"bsonType": "objectId"},
+                    "addedAt": {"bsonType": "date"},
+                },
+            },
+        },
+        "sharing": _SHARING_SCHEMA,
+        "createdAt": {"bsonType": "date"},
+        "updatedAt": {"bsonType": "date"},
+    },
+}
+
 SCHEMAS = {
     USERS: USERS_SCHEMA,
     SURVEYS: SURVEYS_SCHEMA,
     RESPONSES: RESPONSES_SCHEMA,
+    QUESTIONS: QUESTIONS_SCHEMA,
+    QUESTION_BANKS: QUESTION_BANKS_SCHEMA,
 }
 
 # ---------- 索引（设计文档第 5 节），统一显式命名 ----------
@@ -121,6 +192,10 @@ INDEXES = {
     SURVEYS: [
         IndexModel([("shortCode", ASCENDING)], name="shortCode_unique", unique=True),
         IndexModel([("ownerId", ASCENDING), ("createdAt", DESCENDING)], name="ownerId_createdAt"),
+        # 第二阶段：某个版本 / 某道题被哪些问卷使用；跨问卷统计找自己的问卷
+        IndexModel([("questions.source.questionId", ASCENDING)], name="questions_source_questionId"),
+        IndexModel([("questions.source.rootId", ASCENDING), ("ownerId", ASCENDING)],
+                   name="questions_source_rootId_ownerId"),
     ],
     RESPONSES: [
         IndexModel([("surveyId", ASCENDING), ("submittedAt", DESCENDING)], name="surveyId_submittedAt"),
@@ -132,6 +207,27 @@ INDEXES = {
             partialFilterExpression={"isLatest": True},
         ),
         IndexModel([("answers.questionId", ASCENDING)], name="answers_questionId"),
+    ],
+    # ---------- 第二阶段（设计文档 10.10） ----------
+    QUESTIONS: [
+        # 一道题的全部版本；版本号不重复（并发取号冲突时重试）；取最大版本号
+        IndexModel([("rootId", ASCENDING), ("version", ASCENDING)], name="rootId_version_unique", unique=True),
+        IndexModel([("ownerId", ASCENDING), ("updatedAt", DESCENDING)], name="ownerId_updatedAt"),
+        IndexModel([("sharing.userIds", ASCENDING)], name="sharing_userIds"),
+        IndexModel([("sharing.public", ASCENDING)], name="sharing_public",
+                   partialFilterExpression={"sharing.public": True}),
+        # 删除前检查有没有子版本、有没有版本恢复自它
+        IndexModel([("parentId", ASCENDING)], name="parentId"),
+        # 不用部分索引：查询 {restoredFrom: X} 时优化器无法推出它满足 {$type: objectId} 的过滤条件，不会使用部分索引
+        IndexModel([("restoredFrom", ASCENDING)], name="restoredFrom"),
+    ],
+    QUESTION_BANKS: [
+        IndexModel([("ownerId", ASCENDING), ("updatedAt", DESCENDING)], name="ownerId_updatedAt"),
+        IndexModel([("sharing.userIds", ASCENDING)], name="sharing_userIds"),
+        IndexModel([("sharing.public", ASCENDING)], name="sharing_public",
+                   partialFilterExpression={"sharing.public": True}),
+        # 某个版本在哪些题库中（删除版本前检查）
+        IndexModel([("items.questionId", ASCENDING)], name="items_questionId"),
     ],
 }
 

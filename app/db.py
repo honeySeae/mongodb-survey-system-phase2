@@ -12,6 +12,9 @@ from app.config import get_settings
 USERS = "users"
 SURVEYS = "surveys"
 RESPONSES = "responses"
+# 第二阶段新增（设计文档第十节）
+QUESTIONS = "questions"
+QUESTION_BANKS = "questionBanks"
 
 _client: MongoClient | None = None
 

@@ -733,7 +733,7 @@ logic: {
 |---|---|---|
 | questions | `{rootId: 1, version: 1}` 唯一 | 一道题的全部版本（历史）；保证版本号不重复；取最大版本号 |
 | questions | `{parentId: 1}` | 删除前检查有没有子版本 |
-| questions | `{restoredFrom: 1}` 部分索引 `restoredFrom` 存在 | 删除前检查有没有版本恢复自它 |
+| questions | `{restoredFrom: 1}` | 删除前检查有没有版本恢复自它（不用部分索引：按 `{restoredFrom: X}` 查询时用不上“`restoredFrom` 为 ObjectId”的部分索引，测试中发现） |
 | questions | `{ownerId: 1, updatedAt: -1}` | “我的题目”列表 |
 | questions | `{"sharing.userIds": 1}` | 共享给我的题目 |
 | questions | `{"sharing.public": 1}` 部分索引 `sharing.public: true` | 公开的题目 |
