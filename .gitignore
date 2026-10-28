@@ -23,6 +23,7 @@ tests/ui/screenshots/
 docs/CHECKLIST.md
 docs/REPORT_MATERIALS.md
 docs/REQUIREMENTS.md
+docs/REQUIREMENTS_PHASE2.md
 
 # 覆盖率数据（pytest --cov 运行时生成）
 .coverage
