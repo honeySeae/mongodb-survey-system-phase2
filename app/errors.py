@@ -52,6 +52,13 @@ class NotFound(AppError):
         super().__init__(404, code, message)
 
 
+class Forbidden(AppError):
+    """能看到但无权执行该操作（403），如修改别人共享给自己的题目。"""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(403, code, message)
+
+
 class Conflict(AppError):
     """与当前状态或现有数据冲突（409）。"""
 

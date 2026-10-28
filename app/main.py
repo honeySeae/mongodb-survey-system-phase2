@@ -1,7 +1,7 @@
 """FastAPI 应用入口。
 
 启动：uvicorn app.main:app --reload
-挂载各模块的接口路由（auth、surveys、questions、fill、stats、meta）、前端页面路由和静态资源。
+挂载各模块的接口路由（auth、surveys、questions、question_library、fill、stats、meta）、前端页面路由和静态资源。
 """
 import mimetypes
 from contextlib import asynccontextmanager
@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app import db
 from app.db_schema import ensure_schema
 from app.errors import register_error_handlers
-from app.routers import auth, fill, meta, pages, questions, stats, surveys
+from app.routers import auth, fill, meta, pages, question_library, questions, stats, surveys
 
 
 # Windows 上 mimetypes 会读取注册表，部分机器把 .js 识别为 text/plain，浏览器会拒绝执行模块脚本。
@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(surveys.router)
     app.include_router(questions.router)
+    app.include_router(question_library.router)
     app.include_router(fill.router)
     app.include_router(stats.router)
     app.include_router(meta.router)
