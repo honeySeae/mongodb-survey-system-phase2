@@ -69,7 +69,3 @@ def build_content(*, qtype: str, title: str, options: list[dict] | None, validat
     # 内容检查复用第一阶段的规则；required 已在上面单独处理
     problems.extend(check_question_settings(content))
     return content, problems
-
-
-def option_ids(doc: dict) -> set[str]:
-    return {o["id"] for o in doc.get("options") or []}

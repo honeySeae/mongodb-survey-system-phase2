@@ -1,6 +1,6 @@
 // 界面测试（第二阶段 10c 题库页）：新建题库、加入题目（我的 / 共享给我的）、同一道题只能加入一次、
 // “有新版本 vN 可换”与换版本、换其他版本（说明改了什么）、共享题库、原作者取消共享后的不可用提示
-// （只对创建者说明原因）、被共享的人只读查看并在问卷编辑页“从我的题目添加 → 题库”中选题、
+// （只对创建者说明原因）、被共享的人只读查看并在问卷编辑页“从已有题目添加 → 题库”中选题、
 // 修改名称、移除、删除题库、手机尺寸。
 import { scenario } from "./helpers.mjs";
 
@@ -121,7 +121,7 @@ await scenario("题库页", async (t) => {
   assert.ok((await t.text(".library-picker .pick-bank-items")).includes("这一项不可用"));
   await t.click(".library-picker .pick-bank-items .pick-row button", "添加");
   await b.waitFor(`document.querySelector("#questions .badge.source")?.textContent === "来源 v2"`, "从题库添加");
-  t.step("被共享的人在问卷编辑页“从我的题目添加 → 题库”中展开题库并添加（未单独共享给他的题也能用）");
+  t.step("被共享的人在问卷编辑页“从已有题目添加 → 题库”中展开题库并添加（未单独共享给他的题也能用）");
   await t.shot("从题库选题");
 
   // ---------- 移除、删除 ----------

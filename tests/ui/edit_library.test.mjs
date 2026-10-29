@@ -1,4 +1,4 @@
-// 界面测试（第二阶段 10b 问卷编辑页 × 我的题目）：从我的题目添加（选版本、必答）、同一道题不能重复添加、
+// 界面测试（第二阶段 10b 问卷编辑页 × 我的题目）：从已有题目添加（选版本、必答）、同一道题不能重复添加、
 // 来自已保存题目的题只能改必答和跳转、换版本（显示与当前相比改了什么）、存入我的题目（草稿和已发布问卷）、
 // 被共享的人从“共享给我的”中添加、手机尺寸。
 import { scenario } from "./helpers.mjs";
@@ -20,13 +20,13 @@ await scenario("问卷编辑页 × 我的题目", async (t) => {
   await b.goto(`${t.base}/surveys/${survey.id}/edit`);
   await b.waitFor(`document.querySelector("#questions .empty")`, "空问卷");
 
-  // ---------- 从我的题目添加 ----------
+  // ---------- 从已有题目添加 ----------
   assert.ok((await t.texts("#add-bar button")).includes("从已有题目添加"));
   await t.click("#add-bar button", "从已有题目添加");
   await b.waitFor(`document.querySelectorAll(".library-picker .pick-row").length === 1`, "我的题目中的题");
   assert.deepEqual(await b.eval(`[...document.querySelectorAll(".library-picker select option")].map((o) => o.textContent)`),
     ["v2（最新）", "v1"]);
-  t.step("“从我的题目添加”：按题目列出（同一道题一项），可以选择版本，默认最新");
+  t.step("“从已有题目添加”：按题目列出（同一道题一项），可以选择版本，默认最新");
   await t.shot("从已有题目添加");
   await b.eval(`(() => { const s = document.querySelector(".library-picker select"); s.value = ${JSON.stringify(v1.id)}; return true; })()`);
   await t.click(".library-picker .pick-row button", "添加");
@@ -124,6 +124,6 @@ await scenario("问卷编辑页 × 我的题目", async (t) => {
   await t.click(".library-picker .seg button", "共享给我的");
   await b.waitFor(`document.querySelector(".library-picker .pick-row")`, "手机尺寸的面板");
   assert.equal(await b.eval("document.documentElement.scrollWidth > window.innerWidth"), false, "手机尺寸下不应出现横向滚动");
-  t.step("手机尺寸下“从我的题目添加”面板没有横向滚动");
+  t.step("手机尺寸下“从已有题目添加”面板没有横向滚动");
   await t.shot("手机尺寸");
 });

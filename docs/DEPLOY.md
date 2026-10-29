@@ -85,7 +85,7 @@ grep -A2 "^net:" /etc/mongod.conf      # 应为 bindIp: 127.0.0.1（默认值，
 
 ```bash
 sudo apt-get install -y python3-venv git
-git clone https://github.com/honeySeae/mongodb-survey-system.git /opt/survey && cd /opt/survey
+git clone https://github.com/honeySeae/mongodb-survey-system-phase2.git /opt/survey && cd /opt/survey
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 

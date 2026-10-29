@@ -1,6 +1,7 @@
 # API 说明
 
 > 本文件是 [README](../README.md#七api-说明) 中“API 说明”的完整版：每个接口的参数、返回示例和错误码。
+> 第 1–6 节为第一阶段的接口（第二阶段没有改变它们的参数和返回格式）；**第 7–10 节为第二阶段新增的接口**。
 > 运行服务后，http://127.0.0.1:8000/docs 提供可交互的接口文档（点 Authorize 填入令牌即可调试）。
 
 ## 通用约定
@@ -29,7 +30,17 @@
 | 422 | `VALIDATION_ERROR` / `NO_QUESTIONS` | 输入不合法 / 没有题目不能发布 |
 | 500 | `INTERNAL_ERROR` / `SURVEY_DATA_INVALID` | 服务器内部错误 / 问卷数据异常 |
 
-## 接口总览（22 个）
+第二阶段新增的错误码：
+
+| 状态码 | 错误码 | 含义 |
+|---|---|---|
+| 403 | `NOT_OWNER` / `NOT_DIRECTLY_ACCESSIBLE` | 看得到但不是所有者，不能修改 / 只通过别人的题库看到的版本不能加入题库 |
+| 404 | `QUESTION_NOT_FOUND` / `BANK_NOT_FOUND` / `ITEM_NOT_FOUND` | 题目（版本）不存在或无权访问 / 题库不存在或无权访问 / 题库中没有这道题 |
+| 409 | `QUESTION_LOCKED` / `QUESTION_HAS_CHILDREN` / `QUESTION_IN_BANK` / `VERSION_CONFLICT` | 版本已被问卷使用 / 有其他版本从它派生或恢复 / 在题库中 / 同时创建版本冲突 |
+| 409 | `QUESTION_ALREADY_IN_SURVEY` / `OPTION_ID_CONFLICT` / `NOT_FROM_LIBRARY` / `ALREADY_IN_LIBRARY` | 同一道题已在问卷中 / 选项 id 与问卷中其他题重复 / 不是来自已保存题目的题，不能换版本 / 已存入过 |
+| 409 | `ALREADY_IN_BANK` | 同一道题已在题库中 |
+
+## 接口总览（46 个，其中第二阶段新增 24 个）
 
 | 模块 | 方法 | 路径 | 说明 |
 |---|---|---|---|
@@ -47,12 +58,36 @@
 | | PUT | `/api/surveys/{id}/questions/{qid}` | 修改题目（含跳转规则） |
 | | DELETE | `/api/surveys/{id}/questions/{qid}` | 删除题目 |
 | | PUT | `/api/surveys/{id}/questions/order` | 调整题目顺序 |
+| | POST | `/api/surveys/{id}/questions/from-library` | **第二阶段**：从已有题目添加（复制并记录来源） |
+| | PUT | `/api/surveys/{id}/questions/{qid}/version` | **第二阶段**：换成同一道题的其他版本 |
+| | POST | `/api/surveys/{id}/questions/{qid}/save-to-library` | **第二阶段**：存入我的题目 |
 | 填写 | GET | `/api/s/{shortCode}` | 填写者获取问卷 |
 | | POST | `/api/s/{shortCode}/path` | 路径预览（下一题与错误，不保存） |
 | | POST | `/api/s/{shortCode}/responses` | 提交答卷 |
 | 统计 | GET | `/api/surveys/{id}/stats` | 整份问卷统计 |
 | | GET | `/api/surveys/{id}/stats/questions/{qid}` | 单题统计 |
 | | GET | `/api/surveys/{id}/responses` | 答卷列表 |
+| 我的题目（第二阶段） | POST | `/api/questions` | 新建题目（v1） |
+| | GET | `/api/questions` | 版本列表（我的 / 共享给我的 / 公开的） |
+| | GET | `/api/questions/groups` | 按题目分组的列表 |
+| | GET | `/api/questions/{id}` | 版本详情（含能否删除） |
+| | PUT | `/api/questions/{id}` | 直接修改未锁定的版本 |
+| | DELETE | `/api/questions/{id}` | 删除版本 |
+| | POST | `/api/questions/{id}/versions` | 创建新版本 |
+| | POST | `/api/questions/{id}/restore` | 恢复旧版本（复制为新版本） |
+| | GET | `/api/questions/{id}/history` | 版本历史 |
+| | PUT | `/api/questions/{id}/sharing` | 共享设置 |
+| | GET | `/api/questions/{id}/usage` | 被哪些问卷使用 |
+| | GET | `/api/questions/{id}/stats` | 单题跨问卷统计 |
+| 题库（第二阶段） | POST | `/api/banks` | 新建题库 |
+| | GET | `/api/banks` | 题库列表 |
+| | GET | `/api/banks/{id}` | 题库详情（含条目和提示） |
+| | PATCH | `/api/banks/{id}` | 修改名称、说明 |
+| | DELETE | `/api/banks/{id}` | 删除题库 |
+| | PUT | `/api/banks/{id}/sharing` | 共享设置 |
+| | POST | `/api/banks/{id}/items` | 加入题目 |
+| | PUT | `/api/banks/{id}/items/{rootId}` | 换成这道题的其他版本 |
+| | DELETE | `/api/banks/{id}/items/{rootId}` | 移除 |
 | 其他 | GET | `/api/meta` | 题型、运算符表、长度上限（前端使用） |
 | | GET | `/api/health` | 健康检查 |
 
@@ -374,3 +409,230 @@
 
 - `GET /api/meta`：题型列表、各题型允许的校验字段、**运算符表**（直接来自 `app/logic/operators.py`）、各项长度上限。前端的跳转规则编辑器据此显示可选的运算符，不维护副本。不需要登录。
 - `GET /api/health`：`{"status": "ok", "database": "ok"}`；数据库不可用时 503。
+
+---
+
+# 第二阶段新增接口
+
+> 题目保存与复用、版本、共享、题库、被哪些问卷使用、单题跨问卷统计。设计依据见 [DATABASE_DESIGN.md 第十节](DATABASE_DESIGN.md)。
+> 页面上的“我的题目”对应接口 `/api/questions`，“题库”对应 `/api/banks`。第一阶段的接口和返回格式都没有变化（问卷题目多了一个可选字段 `source`，见第 8 节）。
+
+**权限约定**：看不到的题目、题库与不存在一样返回 404（不暴露是否存在）；看得到但不是所有者却要修改返回 403 `NOT_OWNER`。**共享名单**（`sharing`）只返回给所有者，其他人看到的是 `null`。所有者显示为用户名，不返回用户 id。
+
+## 7. 我的题目：题目与版本
+
+每个版本是一条记录，返回格式（`QuestionVersionOut`）：
+
+```json
+{ "id": "6ae3...fae", "rootId": "6ae3...fae", "parentId": null, "restoredFrom": null, "version": 1,
+  "owner": "alice", "isMine": true, "locked": false,
+  "type": "single_choice", "title": "你的性别",
+  "options": [ {"id": "o_3gd4wa", "text": "男"}, {"id": "o_pxvhep", "text": "女"} ],
+  "validation": {},
+  "sharing": { "public": false, "userIds": [], "usernames": [] },
+  "canDelete": null, "deleteBlockedReason": null,
+  "createdAt": "2026-10-29T09:59:49.315Z", "updatedAt": "2026-10-29T09:59:49.315Z" }
+```
+
+| 字段 | 说明 |
+|---|---|
+| `rootId` | 属于哪道题（最初那个版本的 id）；`parentId` 从哪个版本改来；`restoredFrom` 恢复时内容来自哪个版本 |
+| `locked` | 已被问卷使用：不能直接修改，只能基于它创建新版本 |
+| `validation` | 同第一阶段，但**不含 `required`**（是否必答在问卷中设置）；题目中也没有跳转规则 |
+| `sharing` | 只对所有者返回，否则为 `null` |
+| `canDelete`、`deleteBlockedReason` | 只在详情接口中对所有者返回：能否删除、不能时的原因；其他接口中为 `null` |
+
+### `POST /api/questions` 新建题目
+
+请求体 `{type, title, options?, validation?}`，规则同第一阶段的添加题目（选项只写 `text`），但 `validation` 中不能有 `required`，也不接受 `logic`。返回 201 和 v1（`rootId` 等于自己的 `id`，默认不共享）。
+
+### `GET /api/questions` 版本列表、`GET /api/questions/groups` 按题目分组
+
+| 查询参数 | 说明 |
+|---|---|
+| `scope` | `mine` 我的（默认）/ `shared` 共享给我的 / `public` 公开的（不含自己的）/ `all` 全部可访问的 |
+| `rootId` | 只看某道题的版本（仅 `/api/questions`） |
+| `offset`、`limit` | 分页，`limit` 默认 20、最多 100 |
+
+`/api/questions` 每个版本一项；**`/api/questions/groups` 同一道题只出现一次**（页面使用），代表版本 `latest` 为该范围内版本号最大的版本，`versions` 列出该范围内这道题的所有版本：
+
+```json
+{ "items": [ { "rootId": "6ae3...fae",
+               "latest": { "id": "6ae3...fb0", "version": 3, "restoredFrom": "6ae3...fae", "owner": "alice", "isMine": false,
+                           "title": "你的性别", "sharing": null, "...": "（同 QuestionVersionOut）" },
+               "versions": [ {"id": "6ae3...fae", "version": 1, "owner": "alice"},
+                             {"id": "6ae3...faf", "version": 2, "owner": "alice"},
+                             {"id": "6ae3...fb0", "version": 3, "owner": "alice"} ] } ],
+  "total": 1, "offset": 0, "limit": 20 }
+```
+
+### `GET /api/questions/{id}` 版本详情
+
+可访问时返回 `QuestionVersionOut`；所有者另外得到 `canDelete` 和 `deleteBlockedReason`（如“这个版本已被问卷使用，不能删除”）。
+
+### `PUT /api/questions/{id}` 直接修改
+
+只有所有者、只能修改**未锁定**的版本。请求体同新建（整体提交；保留的选项带原 `id`，新增选项不带 `id`，未提交的视为删除），`type` 必须与原版本相同。可带查询参数 `expectedUpdatedAt` 检查编辑冲突。
+
+| 情况 | 返回 |
+|---|---|
+| 已锁定 | 409 `{"code": "QUESTION_LOCKED", "message": "这个版本已被问卷使用，不能直接修改；请基于它创建新版本"}` |
+| 不是所有者 | 403 `{"code": "NOT_OWNER", "message": "这是别人共享给你的题目，不能直接修改；可以基于它创建自己的新版本"}` |
+| 改了题型 | 422，`errors` 字段 `type`：“同一道题的各个版本题型必须相同；要换题型请新建一道题” |
+| 期间被修改 | 409 `EDIT_CONFLICT` |
+
+### `POST /api/questions/{id}/versions` 创建新版本
+
+基于一个可访问的版本（锁定与否都可以，别人共享的也可以）创建**自己的**新版本：请求体同直接修改。`parentId` 为该版本，`version` 为这道题现有最大版本号 + 1；**选项 id 保持不变**：保留的选项（包括只改了文字的）带原 id，新增选项生成在这道题所有版本中都没用过的 id。新版本继承自己在这道题上的共享设置。返回 201。
+
+```json
+// 请求：基于 v1，把“女”改为“女性”，新增“其他”
+{ "type": "single_choice", "title": "你的性别",
+  "options": [ {"id": "o_3gd4wa", "text": "男"}, {"id": "o_pxvhep", "text": "女性"}, {"text": "其他"} ] }
+// 201：v2，options 为 [ {"id": "o_3gd4wa", "text": "男"}, {"id": "o_pxvhep", "text": "女性"}, {"id": "o_zxb7ij", "text": "其他"} ]
+```
+
+### `POST /api/questions/{id}/restore` 恢复旧版本
+
+把 `{id}` 的内容复制成一个新版本（`restoredFrom` = `{id}`），旧版本不变。请求体可选 `{"parentId": "..."}`：接在哪个版本后面（必须是同一道题）；不填时接在**自己**在这道题下版本号最大的版本后面，自己还没有版本时接在被恢复的版本后面。返回 201。
+
+### `GET /api/questions/{id}/history` 版本历史
+
+这道题的全部版本，按版本号排序；无权查看的版本只有版本号和父子关系（`accessible: false`，`detail: null`），版本树不会断开：
+
+```json
+{ "rootId": "6ae3...fae",
+  "versions": [ { "id": "6ae3...fae", "version": 1, "parentId": null, "restoredFrom": null, "accessible": true, "detail": { "...": "QuestionVersionOut" } },
+                { "id": "6ae3...faf", "version": 2, "parentId": "6ae3...fae", "restoredFrom": null, "accessible": true, "detail": { "...": "..." } },
+                { "id": "6ae3...fb0", "version": 3, "parentId": "6ae3...faf", "restoredFrom": "6ae3...fae", "accessible": true, "detail": { "...": "..." } } ] }
+```
+
+### `PUT /api/questions/{id}/sharing` 共享设置
+
+只有所有者。请求体 `{"public": true|false, "usernames": ["bob", ...]}`，**整体替换**原设置（空数组 = 不共享给任何人）；以整道题为单位，同时作用于自己在这道题下的所有版本。用户名去首尾空格、去重；不存在的用户、共享给自己、超过 100 个用户时 422（如 `{"field": "usernames[0]", "message": "用户「nobody」不存在"}`），原设置不变。不改 `updatedAt`。
+
+```json
+// 200
+{ "question": { "...": "QuestionVersionOut", "sharing": { "public": false, "userIds": ["6ae3...fad"], "usernames": ["bob"] } },
+  "updatedVersions": 3 }
+```
+
+### `DELETE /api/questions/{id}` 删除版本
+
+只有所有者；成功 204。被问卷用过（409 `QUESTION_LOCKED`）、有其他版本从它派生或恢复（409 `QUESTION_HAS_CHILDREN`）、在任何人的题库中（409 `QUESTION_IN_BANK`）的版本不能删除——删除不能影响已有问卷和别人的题库。
+
+## 8. 问卷使用已保存的题
+
+问卷题目（第一阶段 `questions[]` 的每一项）新增**可选字段** `source`，记录来自哪个版本；没有 `source` 的题（第一阶段的题、问卷中直接建的题）一切照旧。`source` 由系统维护，请求中带 `source` 会被拒绝（422）。填写者获取问卷时看不到 `source`。
+
+```json
+{ "id": "q_w2y9bk", "type": "single_choice", "title": "你的性别",
+  "options": [ {"id": "o_3gd4wa", "text": "男"}, {"id": "o_pxvhep", "text": "女"} ],
+  "validation": { "required": true },
+  "source": { "questionId": "6ae3...fae", "rootId": "6ae3...fae", "version": 1 } }
+```
+
+### `POST /api/surveys/{id}/questions/from-library` 从已有题目添加
+
+只有草稿。请求体 `{"questionId": 版本 id, "required": false, "position": null}`：把这个版本的内容**复制**进问卷（选项 id 沿用），记录 `source`，版本随之锁定。跳转规则添加后通过“修改题目”设置。可带 `expectedUpdatedAt`。返回 201 和完整问卷。
+
+| 情况 | 返回 |
+|---|---|
+| 同一道题（同一 `rootId`）已在问卷中 | 409 `QUESTION_ALREADY_IN_SURVEY`“这道题已经在问卷中（第 1 题），同一道题在一份问卷中只能出现一次” |
+| 选项 id 与问卷中其他题重复（概率极低） | 409 `OPTION_ID_CONFLICT` |
+| 版本不可访问 / 问卷不是草稿 / 已有 100 道题 | 404 / 409 `INVALID_STATUS` / 422 |
+
+### `PUT /api/surveys/{id}/questions/{qid}` 修改来自已保存题目的题
+
+仍用第一阶段的修改接口（整体提交）。对有 `source` 的题，**只能改 `validation.required` 和跳转规则 `logic`**；题型、题目、选项（含文字和 id）、其他校验必须与当前相同，否则 422（字段 `source`，提示“在‘我的题目’中创建新版本后换版本”）。
+
+### `PUT /api/surveys/{id}/questions/{qid}/version` 换版本
+
+只有草稿。请求体 `{"questionId": 目标版本 id}`，必须是同一道题的可访问版本。题目在问卷中的 id、`required`、跳转规则保留，内容换成新版本，`source` 更新，新版本加锁。跳转规则引用的选项在新版本中不存在时 422（指出是哪个选项）；问卷中直接建的题 409 `NOT_FROM_LIBRARY`。返回完整问卷。
+
+### `POST /api/surveys/{id}/questions/{qid}/save-to-library` 存入我的题目
+
+只有问卷创建者；**任何状态的问卷都可以**（只补来源信息，不改题目内容和答卷）。用这道题的内容生成新题 v1（选项 id 沿用、`validation` 去掉 `required`、不含跳转规则、创建即锁定、不共享），并给原题补上 `source`。已有 `source` 的题 409 `ALREADY_IN_LIBRARY`；期间问卷被修改 409 `EDIT_CONFLICT`（此时撤销 v1）。返回 201：
+
+```json
+{ "survey": { "...": "完整问卷，这道题多了 source" },
+  "question": { "id": "6ae3...fb2", "version": 1, "locked": true, "type": "text", "title": "备注", "validation": {}, "...": "..." } }
+```
+
+## 9. 题库
+
+一个题库的每一项是一道题的一个**固定版本**；同一道题在一个题库中只有一项，所以条目用 `rootId` 标识。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/banks` | 新建，请求体 `{name, description?}`（名称 1–100 字，说明 0–1000 字） |
+| GET | `/api/banks?scope=mine\|shared\|public\|all&offset=&limit=` | 列表（不含条目，含 `itemCount`） |
+| GET | `/api/banks/{id}` | 详情（含条目） |
+| PATCH | `/api/banks/{id}` | 修改名称、说明（只提交要改的字段） |
+| DELETE | `/api/banks/{id}` | 删除（不影响问卷和题目），204 |
+| PUT | `/api/banks/{id}/sharing` | 共享设置，请求体与规则同题目共享 |
+| POST | `/api/banks/{id}/items` | 加入一个版本 `{questionId}`；放进题库**不加锁** |
+| PUT | `/api/banks/{id}/items/{rootId}` | 把这道题的一项换成另一个版本 `{questionId}` |
+| DELETE | `/api/banks/{id}/items/{rootId}` | 移除这一项 |
+
+**只有创建者能修改题库**；共享后别人可以查看、把其中的版本用在自己的问卷中、基于它们创建自己的新版本（这些版本即使没有单独共享给他也可以）。加入的版本必须是创建者**直接**可访问的（自己的、共享给自己的、公开的），只通过别人的题库看到的版本不能再加入题库（403 `NOT_DIRECTLY_ACCESSIBLE`）。同一道题再加入 409 `ALREADY_IN_BANK`；每个题库最多 200 项。
+
+详情中每一项：`available` 是否可用（题库创建者**现在**仍能访问该版本），不可用时没有 `question`；`newerVersion` 和 `notice` **只对创建者**返回（有新版本可换、不可用的原因和处理办法），其他人为 `null`：
+
+```json
+{ "id": "6ae3...fb6", "name": "常用题", "description": "每学期都用", "owner": "alice", "isMine": true, "itemCount": 1,
+  "sharing": { "public": false, "userIds": [], "usernames": [] },
+  "items": [ { "questionId": "6ae3...fae", "rootId": "6ae3...fae", "addedAt": "...", "available": true,
+               "question": { "...": "QuestionVersionOut（v1）" },
+               "newerVersion": { "questionId": "6ae3...fb0", "version": 3 },
+               "notice": "有新版本 v3 可换" } ],
+  "createdAt": "...", "updatedAt": "..." }
+```
+
+不可用时 `notice` 如“原作者 carol 已取消共享（或不再公开）这道题，你已不能使用这个版本；请移除这一项，或换成 v2”。
+
+## 10. 被哪些问卷使用、单题跨问卷统计
+
+### `GET /api/questions/{id}/usage` 被哪些问卷使用
+
+查询参数 `scope`：`version`（默认，只看这个版本）/ `question`（整道题的所有版本）。能访问这个版本的人都可以查；**自己的问卷**显示标题、状态、链接，**别人的问卷只给数量**。草稿、已发布、已关闭都计入；只依据问卷题目的 `source`。
+
+```json
+{ "scope": "question", "questionId": "6ae3...fae", "rootId": "6ae3...fae",
+  "mine": [ { "id": "6ae3...fb1", "title": "年度调查", "status": "published", "isExpired": false,
+              "shortCode": "czx3rn", "url": "http://127.0.0.1:8000/survey/czx3rn",
+              "surveyQuestionId": "q_w2y9bk", "questionId": "6ae3...faf", "version": 2 } ],
+  "mineCount": 1, "othersCount": 0, "totalCount": 1 }
+```
+
+### `GET /api/questions/{id}/stats` 单题跨问卷统计
+
+只统计**自己的已发布、已关闭**问卷中使用这道题的题目；每份问卷按它自己的提交策略选答卷（与第 5 节口径相同）；**不显示填写人**（无论问卷是否匿名）。
+
+| 查询参数 | 说明 |
+|---|---|
+| `versionId` | 只统计这些版本（可重复）；不填则合并整道题的所有版本 |
+| `surveyId` | 只统计这些问卷（可重复），必须是自己的、使用这道题的、已发布或已关闭的问卷；与 `versionId` 同时给出时取交集 |
+| `offset`、`limit` | 文本、数字题合并后的内容分页，`limit` 默认 20、最多 200 |
+
+- `overall`：问卷数、答卷数（各问卷相加）、**作答人数（跨问卷去重）**；单选、多选的选项**按选项 id 合并**，文字取参与统计的版本中含有该选项的最新版本，在参与统计的最新版本中已被删除的选项照常计数并标注 `onlyInOldVersions: true`；数字题的 `average` 按全部答案计算；文本、数字题的 `items` 每条附所在问卷。
+- `surveys`：每份问卷各自的数据（与第 5 节单题统计一致）。
+
+```json
+{ "questionId": "6ae3...fae", "rootId": "6ae3...fae", "type": "single_choice", "title": "你的性别",
+  "versionFilter": null, "surveyFilter": null,
+  "overall": { "surveyCount": 1, "answerCount": 3, "respondentCount": 1,
+               "options": [ {"id": "o_3gd4wa", "text": "男", "count": 1, "onlyInOldVersions": false},
+                            {"id": "o_pxvhep", "text": "女性", "count": 2, "onlyInOldVersions": false},
+                            {"id": "o_zxb7ij", "text": "其他", "count": 0, "onlyInOldVersions": false} ],
+               "average": null, "items": null, "itemsTotal": null },
+  "surveys": [ { "surveyId": "6ae3...fb1", "title": "年度调查", "status": "published", "isExpired": false,
+                 "url": "http://127.0.0.1:8000/survey/czx3rn", "submissionPolicy": "all",
+                 "surveyQuestionId": "q_w2y9bk", "questionId": "6ae3...faf", "version": 2,
+                 "answerCount": 3, "respondentCount": 1,
+                 "options": [ {"id": "o_3gd4wa", "text": "男", "count": 1}, {"id": "o_pxvhep", "text": "女性", "count": 2},
+                              {"id": "o_zxb7ij", "text": "其他", "count": 0} ],
+                 "average": null } ] }
+```
+
+数字、文本题的 `items` 每一项为 `{surveyId, surveyTitle, value, submittedAt}`，`itemsTotal` 为总条数。
