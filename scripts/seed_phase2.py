@@ -1,8 +1,8 @@
 """第二阶段示例数据：一门课连续三个学期的课程评价，演示题目复用、版本、共享、题库和跨问卷统计。
 
 用法（在项目根目录，先启动 MongoDB）：
-    python -m scripts.seed_demo            # 同时生成第一阶段和第二阶段的示例数据
-    python -m scripts.seed_phase2          # 只生成第二阶段的示例数据
+    python -m scripts.seed_demo            # 第一阶段的示例数据（不变）
+    python -m scripts.seed_phase2          # 第二阶段的示例数据（与第一阶段的互不影响，可以都生成）
     python -m scripts.seed_phase2 --reset  # 删除第二阶段示例账号的问卷、答卷、题目、题库后重新生成
 
 与第一阶段示例脚本一样直接调用服务层（与网页操作走相同的校验、版本、共享和提交规则）。
