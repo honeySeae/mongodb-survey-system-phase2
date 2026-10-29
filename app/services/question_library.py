@@ -199,6 +199,25 @@ def restore_version(db: Database, user_id: ObjectId, question_id: str, parent_id
                            restored_from=source["_id"])
 
 
+# ---------- 把问卷里的题存进题目库（10.5） ----------
+def create_from_survey_question(db: Database, owner_id: ObjectId, question: dict) -> dict:
+    """用问卷中一道题的内容生成新题 v1：选项 id 沿用，validation 去掉 required，不含跳转规则。
+    这道题已被该问卷使用，所以 v1 创建时即锁定。"""
+    qid, now = ObjectId(), now_utc()
+    content = {k: question[k] for k in ("type", "title", "options") if k in question}
+    content["validation"] = {k: v for k, v in question["validation"].items() if k != "required"}
+    doc = {
+        "_id": qid, "rootId": qid, "parentId": None, "version": 1, "ownerId": owner_id,
+        **content, "sharing": dict(PRIVATE), "lockedAt": now, "createdAt": now, "updatedAt": now,
+    }
+    return questions_repo.insert(db, doc)
+
+
+def discard(db: Database, question_id: ObjectId) -> None:
+    """撤销刚创建、尚未被使用的版本（存入题目库失败时）。"""
+    questions_repo.delete(db, question_id)
+
+
 # ---------- 加进问卷前加锁（10.4 第 2 条、10.5） ----------
 def lock_for_use(db: Database, user_id: ObjectId, question_id: str) -> dict:
     """取一个可访问的版本并加锁，返回加锁后的版本（内容从此不再变化，可以复制进问卷）。

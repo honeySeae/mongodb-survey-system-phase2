@@ -51,7 +51,7 @@ def version_out(doc: dict, user_id, usernames: dict) -> QuestionVersionOut:
     )
 
 
-def _out(db: Database, doc: dict, user: dict) -> QuestionVersionOut:
+def version_detail(db: Database, doc: dict, user: dict) -> QuestionVersionOut:
     return version_out(doc, user["_id"], _names(db, [doc], user["_id"]))
 
 
@@ -65,7 +65,7 @@ def create(body: QuestionVersionCreate, user: dict = Depends(get_current_user),
     """新建一道题，生成 v1（默认不共享）。"""
     doc = service.create_question(db, user["_id"], qtype=body.type, title=body.title,
                                   options=_options(body), validation=body.validation)
-    return _out(db, doc, user)
+    return version_detail(db, doc, user)
 
 
 @router.get("", response_model=QuestionVersionList)
@@ -83,7 +83,7 @@ def list_versions(scope: str = Query("mine", pattern="^(mine|shared|public|all)$
 
 @router.get("/{question_id}", response_model=QuestionVersionOut)
 def detail(question_id: str, user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
-    return _out(db, service.get_accessible(db, user["_id"], question_id), user)
+    return version_detail(db, service.get_accessible(db, user["_id"], question_id), user)
 
 
 @router.put("/{question_id}", response_model=QuestionVersionOut)
@@ -94,7 +94,7 @@ def update(question_id: str, body: QuestionVersionEdit,
     doc = service.update_version(db, user["_id"], question_id, qtype=body.type, title=body.title,
                                  options=_options(body), validation=body.validation,
                                  expected_updated_at=expected_updated_at)
-    return _out(db, doc, user)
+    return version_detail(db, doc, user)
 
 
 @router.delete("/{question_id}", status_code=204)
@@ -110,7 +110,7 @@ def derive(question_id: str, body: QuestionVersionEdit, user: dict = Depends(get
     """基于一个可访问的版本创建自己的新版本（parentId = 该版本）。"""
     doc = service.derive_version(db, user["_id"], question_id, qtype=body.type, title=body.title,
                                  options=_options(body), validation=body.validation)
-    return _out(db, doc, user)
+    return version_detail(db, doc, user)
 
 
 @router.post("/{question_id}/restore", response_model=QuestionVersionOut, status_code=201)
@@ -118,7 +118,7 @@ def restore(question_id: str, body: RestoreRequest | None = None, user: dict = D
             db: Database = Depends(get_database)):
     """把这个版本的内容复制成一个新版本（restoredFrom = 该版本），接在 parentId 后面。"""
     doc = service.restore_version(db, user["_id"], question_id, body.parent_id if body else None)
-    return _out(db, doc, user)
+    return version_detail(db, doc, user)
 
 
 @router.put("/{question_id}/sharing", response_model=SharingResult)
@@ -127,7 +127,7 @@ def set_sharing(question_id: str, body: SharingUpdate, user: dict = Depends(get_
     """设置共享（只有所有者）：以整道题为单位，同时作用于自己在这道题下的所有版本；整体替换原设置。"""
     doc, count = service.set_sharing(db, user["_id"], question_id,
                                      public=body.public, usernames=body.usernames)
-    return SharingResult(question=_out(db, doc, user), updated_versions=count)
+    return SharingResult(question=version_detail(db, doc, user), updated_versions=count)
 
 
 @router.get("/{question_id}/history", response_model=QuestionHistory)

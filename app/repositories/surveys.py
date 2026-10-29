@@ -50,6 +50,21 @@ def update_if_status(db: Database, survey_id: ObjectId, owner_id: ObjectId,
         query, {"$set": set_fields}, return_document=ReturnDocument.AFTER)
 
 
+def set_question_source(db: Database, survey_id: ObjectId, owner_id: ObjectId, question_id: str,
+                        source: dict, read_updated_at, new_updated_at) -> dict | None:
+    """第二阶段：给问卷中的一道题补上 source（10.5，任何状态的问卷都可以）。
+
+    条件：这道题还没有 source，且问卷自读取后没有被修改（updatedAt 不变）；不满足时返回 None。
+    只改这道题的 source 和问卷的 updatedAt，题目内容不变。
+    """
+    return db[SURVEYS].find_one_and_update(
+        {"_id": survey_id, "ownerId": owner_id, "updatedAt": read_updated_at,
+         "questions": {"$elemMatch": {"id": question_id, "source": {"$exists": False}}}},
+        {"$set": {"questions.$[q].source": source, "updatedAt": new_updated_at}},
+        array_filters=[{"q.id": question_id}],
+        return_document=ReturnDocument.AFTER)
+
+
 def delete_if_status(db: Database, survey_id: ObjectId, owner_id: ObjectId, status: str) -> bool:
     result = db[SURVEYS].delete_one({"_id": survey_id, "ownerId": owner_id, "status": status})
     return result.deleted_count == 1

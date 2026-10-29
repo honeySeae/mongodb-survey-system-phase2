@@ -274,3 +274,36 @@ def switch_version(db: Database, owner_id: ObjectId, survey_id: str, question_id
     questions[i] = _library_question(question_id, version, old["validation"].get("required", False),
                                      old.get("logic"))
     return _save(db, owner_id, survey, questions)
+
+
+def save_to_library(db: Database, owner_id: ObjectId, survey_id: str, question_id: str
+                    ) -> tuple[dict, dict]:
+    """把问卷中直接建的题存进题目库（10.5）：生成新题 v1（选项 id 沿用），并给原问卷的题补上 source。
+
+    不改题目内容，因此任何状态的问卷都可以（已发布、已关闭的问卷只是补充来源信息，答卷不变）。
+    先创建 v1，再用条件更新给问卷的题补 source；后者失败（已被存过、问卷期间被修改）时撤销 v1。
+    返回 (更新后的问卷, 新版本)。
+    """
+    survey = get_owned(db, owner_id, survey_id)
+    i = _find_index(survey, question_id)
+    if "source" in survey["questions"][i]:
+        raise _already_in_library()
+
+    version = library.create_from_survey_question(db, owner_id, survey["questions"][i])
+    now = max(now_utc(), survey["updatedAt"] + timedelta(milliseconds=1))
+    updated = surveys_repo.set_question_source(db, survey["_id"], owner_id, question_id,
+                                               library.source_of(version), survey["updatedAt"], now)
+    if updated is None:
+        library.discard(db, version["_id"])
+        current = surveys_repo.find_owned(db, survey["_id"], owner_id)
+        q = next((q for q in (current or {}).get("questions", []) if q["id"] == question_id), None)
+        if q is None:
+            raise NotFound("QUESTION_NOT_FOUND", "题目不存在")
+        if "source" in q:
+            raise _already_in_library()
+        raise _edit_conflict()
+    return updated, version
+
+
+def _already_in_library() -> Conflict:
+    return Conflict("ALREADY_IN_LIBRARY", "这道题来自题目库（或已存入题目库），不能重复存入")

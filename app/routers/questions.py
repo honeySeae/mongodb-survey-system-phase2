@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import AwareDatetime
 from pymongo.database import Database
 
+from app.routers.question_library import version_detail
 from app.routers.surveys import survey_out
+from app.schemas.question_library import SaveToLibraryResult
 from app.schemas.questions import (LibraryQuestionAdd, QuestionCreate, QuestionUpdate, ReorderRequest,
                                    SwitchVersionRequest)
 from app.schemas.surveys import SurveyOut
@@ -73,6 +75,15 @@ def switch_version(survey_id: str, question_id: str, body: SwitchVersionRequest,
     return survey_out(question_service.switch_version(
         db, user["_id"], survey_id, question_id, version_id=body.question_id,
         expected_updated_at=expected_updated_at))
+
+
+@router.post("/{question_id}/save-to-library", response_model=SaveToLibraryResult, status_code=201)
+def save_to_library(survey_id: str, question_id: str,
+                    user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
+    """第二阶段：把问卷中直接建的题存进题目库，生成新题 v1（选项 id 沿用），并给原题补上 source。
+    不改题目内容，已发布、已关闭的问卷也可以。"""
+    survey, version = question_service.save_to_library(db, user["_id"], survey_id, question_id)
+    return SaveToLibraryResult(survey=survey_out(survey), question=version_detail(db, version, user))
 
 
 @router.delete("/{question_id}", response_model=SurveyOut)

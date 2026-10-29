@@ -9,6 +9,7 @@ from pydantic import StrictBool
 
 from app.schemas.common import CamelModel
 from app.schemas.questions import OptionCreate, OptionUpdate, StrictCamelModel
+from app.schemas.surveys import SurveyOut
 
 
 class QuestionVersionCreate(StrictCamelModel):
@@ -65,6 +66,12 @@ class QuestionVersionOut(CamelModel):
 class SharingResult(CamelModel):
     question: QuestionVersionOut
     updated_versions: int  # 自己在这道题下被一起更新的版本数
+
+
+class SaveToLibraryResult(CamelModel):
+    """存入题目库的结果：补上 source 的问卷和新生成的 v1。"""
+    survey: SurveyOut
+    question: QuestionVersionOut
 
 
 class QuestionVersionList(CamelModel):
