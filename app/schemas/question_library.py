@@ -127,6 +127,12 @@ class CrossOptionCount(CamelModel):
     count: int
 
 
+class MergedOptionCount(CrossOptionCount):
+    """合并后的选项：文字取含有该选项的最新版本；only_in_old_versions 表示该选项在参与统计的
+    最新版本中已被删除、只出现在旧版本中（用旧版本的问卷里选了它的答案照常计数）。"""
+    only_in_old_versions: bool
+
+
 class CrossItem(CamelModel):
     """合并后的一条填空内容：附所在问卷，不附填写人。"""
     survey_id: str
@@ -139,7 +145,7 @@ class CrossOverall(CamelModel):
     survey_count: int
     answer_count: int        # 各问卷答卷数之和
     respondent_count: int    # 跨问卷去重后的作答人数
-    options: list[CrossOptionCount] | None = None   # 单选、多选
+    options: list[MergedOptionCount] | None = None  # 单选、多选
     average: float | None = None                    # 数字（按全部答案计算）
     items: list[CrossItem] | None = None            # 文本、数字（分页）
     items_total: int | None = None
@@ -166,5 +172,6 @@ class CrossQuestionStats(CamelModel):
     type: str
     title: str
     version_filter: list[str] | None  # 按版本筛选时的版本 id；null 表示合并所有版本
+    survey_filter: list[str] | None   # 按问卷筛选时的问卷 id；null 表示所有问卷
     overall: CrossOverall
     surveys: list[CrossSurveyStats]

@@ -12,7 +12,7 @@ from app.logic import survey_state as state
 from app.repositories import users as users_repo
 from app.routers.surveys import survey_url
 from app.schemas.question_library import (CrossItem, CrossOptionCount, CrossOverall, CrossQuestionStats,
-                                          CrossSurveyStats, HistoryNode, QuestionHistory, QuestionVersionCreate,
+                                          CrossSurveyStats, MergedOptionCount, HistoryNode, QuestionHistory, QuestionVersionCreate,
                                           QuestionVersionEdit, QuestionVersionList, QuestionVersionOut,
                                           QuestionUsage, RestoreRequest, SharingOut, SharingResult, SharingUpdate,
                                           UsageSurvey)
@@ -164,20 +164,22 @@ CROSS_ITEMS_LIMIT_MAX = 200
 def get_cross_stats(question_id: str,
                     version_id: list[str] | None = Query(None, alias="versionId",
                                                          description="只统计这些版本（可重复）；不填则合并所有版本"),
+                    survey_id: list[str] | None = Query(None, alias="surveyId",
+                                                        description="只统计这些问卷（可重复）；不填则统计所有问卷"),
                     offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=CROSS_ITEMS_LIMIT_MAX),
                     user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
     """单题跨问卷统计：只统计自己的已发布、已关闭问卷；每份问卷按自己的提交策略选答卷；不显示填写人。
     offset、limit 用于文本、数字题合并后的内容分页。"""
     r = cross_stats_service.cross_stats(db, user["_id"], question_id, version_ids=version_id,
-                                        offset=offset, limit=limit)
+                                        survey_ids=survey_id, offset=offset, limit=limit)
     o = r["overall"]
 
-    def options(items):
-        return [CrossOptionCount(**x) for x in items] if items is not None else None
+    def options(items, model=CrossOptionCount):
+        return [model(**x) for x in items] if items is not None else None
 
     overall = CrossOverall(
         survey_count=o["survey_count"], answer_count=o["answer_count"], respondent_count=o["respondent_count"],
-        options=options(o.get("options")), average=o.get("average"),
+        options=options(o.get("options"), MergedOptionCount), average=o.get("average"),
         items=[CrossItem(survey_id=str(i["survey_id"]), survey_title=i["survey_title"], value=i["value"],
                          submitted_at=i["submitted_at"]) for i in o["items"]] if "items" in o else None,
         items_total=o.get("items_total"))
@@ -190,7 +192,8 @@ def get_cross_stats(question_id: str,
         options=options(x.get("options")), average=x.get("average")) for x in r["surveys"]]
     doc = r["question"]
     return CrossQuestionStats(question_id=str(doc["_id"]), root_id=str(doc["rootId"]), type=r["type"],
-                              title=r["title"], version_filter=r["version_filter"], overall=overall,
+                              title=r["title"], version_filter=r["version_filter"],
+                              survey_filter=r["survey_filter"], overall=overall,
                               surveys=surveys)
 
 

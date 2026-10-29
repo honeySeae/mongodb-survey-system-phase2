@@ -243,3 +243,84 @@ def test_phase1_answers_counted_after_saving_to_library(client, alice, bob):
     o = ok(cross(client, alice, v1["id"]))["overall"]
     assert by_text(o["options"]) == {"喜欢": 1, "不喜欢": 1}
     assert (o["surveyCount"], o["answerCount"], o["respondentCount"]) == (2, 2, 1)
+
+
+# ---------- 只在旧版本中出现的选项 ----------
+def test_option_deleted_in_newer_version_still_counted(client, alice, bob, carol):
+    """v1：男、女、保密；v2：“保密”改为“不想说”；v3：删掉这个选项。
+    用 v1、v2 的问卷里选了它的答案照常计数，总数正确；文字取含有它的最新版本（v2 的“不想说”），并标注只在旧版本中出现。"""
+    v1 = create(client, alice, {**GENDER, "options": [{"text": "男"}, {"text": "女"}, {"text": "保密"}]})
+    male, female, secret = v1["options"]
+    v2 = ok(derive(client, alice, v1["id"], options=[male, female, {"id": secret["id"], "text": "不想说"}]), 201)
+    v3 = ok(derive(client, alice, v2["id"], options=[male, female]), 201)
+    s1, q1 = publish_with(client, alice, v1["id"], "v1 的问卷")
+    s2, q2 = publish_with(client, alice, v2["id"], "v2 的问卷")
+    s3, q3 = publish_with(client, alice, v3["id"], "v3 的问卷")
+    answer(client, bob, s1, q1, secret["id"])
+    answer(client, carol, s1, q1, male["id"])
+    answer(client, bob, s2, q2, secret["id"])
+    answer(client, bob, s3, q3, female["id"])
+
+    o = ok(cross(client, alice, v1["id"]))["overall"]
+    assert o["options"] == [
+        {"id": male["id"], "text": "男", "count": 1, "onlyInOldVersions": False},
+        {"id": female["id"], "text": "女", "count": 1, "onlyInOldVersions": False},
+        {"id": secret["id"], "text": "不想说", "count": 2, "onlyInOldVersions": True},   # 排在最新版本的选项之后
+    ]
+    assert o["answerCount"] == 4 == sum(x["count"] for x in o["options"])    # 没有答案被丢掉
+    # 每份问卷各自的数据用它自己的选项
+    per = {s["title"]: by_text(s["options"]) for s in ok(cross(client, alice, v1["id"]))["surveys"]}
+    assert per == {"v1 的问卷": {"男": 1, "女": 0, "保密": 1}, "v2 的问卷": {"男": 0, "女": 0, "不想说": 1},
+                   "v3 的问卷": {"男": 0, "女": 1}}
+
+    # “最新版本”指参与统计的版本中最新的：只统计 v1、v2 时，这个选项不算只在旧版本中出现
+    o = ok(cross(client, alice, v1["id"], versionId=[v1["id"], v2["id"]]))["overall"]
+    assert {x["text"]: x["onlyInOldVersions"] for x in o["options"]} == {"男": False, "女": False, "不想说": False}
+
+
+def test_multiple_choice_option_deleted_in_newer_version(client, alice, bob):
+    v1 = create(client, alice, {"type": "multiple_choice", "title": "爱好",
+                                "options": [{"text": "读书"}, {"text": "游戏"}]})
+    read, game = v1["options"]
+    v2 = ok(derive(client, alice, v1["id"], options=[read, {"text": "运动"}]), 201)
+    s1, q1 = publish_with(client, alice, v1["id"], "旧")
+    s2, q2 = publish_with(client, alice, v2["id"], "新")
+    answer(client, bob, s1, q1, [read["id"], game["id"]])
+    answer(client, bob, s2, q2, [read["id"], v2["options"][1]["id"]])
+    o = ok(cross(client, alice, v1["id"]))["overall"]
+    assert [(x["text"], x["count"], x["onlyInOldVersions"]) for x in o["options"]] == [
+        ("读书", 2, False), ("运动", 1, False), ("游戏", 1, True)]
+    assert o["answerCount"] == 2
+
+
+# ---------- 按问卷筛选 ----------
+def test_filter_by_survey(client, alice, bob, carol, gender):
+    """比较“去年的问卷”和“今年的问卷”：只统计指定的问卷，默认全部。"""
+    s1, s2 = gender["s1"]["id"], gender["s2"]["id"]
+    v1 = gender["v1"]["id"]
+    r = ok(cross(client, alice, v1, surveyId=s1))
+    assert r["surveyFilter"] == [s1] and [s["title"] for s in r["surveys"]] == ["S1"]
+    assert (r["overall"]["answerCount"], r["overall"]["respondentCount"]) == (2, 2)
+    assert by_text(r["overall"]["options"]) == {"男": 1, "女": 1}   # 只有 v1 参与：文字取 v1 的
+    r = ok(cross(client, alice, v1, surveyId=[s1, s2]))
+    assert r["overall"]["answerCount"] == 5 and r["surveyFilter"] == sorted([s1, s2])
+    assert ok(cross(client, alice, v1))["surveyFilter"] is None
+
+
+def test_survey_filter_combined_with_version_filter(client, alice, gender):
+    """同时按版本和问卷筛选时取交集：S1 用的是 v1，只要 v2 就没有问卷参与。"""
+    r = ok(cross(client, alice, gender["v1"]["id"], surveyId=gender["s1"]["id"], versionId=gender["v2"]["id"]))
+    assert r["surveys"] == [] and r["overall"]["surveyCount"] == 0 and r["overall"]["answerCount"] == 0
+
+
+def test_survey_filter_validation(client, alice, bob, gender):
+    v1 = gender["v1"]["id"]
+    draft = new_survey(client, alice, title="草稿")
+    ok(add_lib(client, alice, draft["id"], gender["v2"]["id"]), 201)
+    unrelated = build_fruit_survey(client, alice)["survey"]["id"]       # 没有用这道题
+    ok(share(client, alice, v1, ["bob"]))
+    bobs, _ = publish_with(client, bob, v1, "bob 的问卷")                 # 别人的问卷
+    for bad in (draft["id"], unrelated, bobs["id"], "not-an-id", str(ObjectId())):
+        r = cross(client, alice, v1, surveyId=[gender["s1"]["id"], bad])
+        assert r.status_code == 422, bad
+        assert r.json()["errors"][0]["field"] == "surveyId[1]"

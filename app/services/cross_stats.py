@@ -1,11 +1,13 @@
 """单题跨问卷统计（设计文档 10.8，需求八）。
 
 - 只统计**自己的**问卷中使用这道题的题目；只算已发布、已关闭的问卷（草稿没有答卷）
-- 默认合并同一道题（同一 rootId）的所有版本；可以按版本筛选（问卷题目的 source.questionId）
+- 默认合并同一道题（同一 rootId）的所有版本、所有问卷；可以按版本筛选（问卷题目的 source.questionId），
+  也可以按问卷筛选（如比较“去年的问卷”和“今年的问卷”），两者同时给出时取交集
 - 每份问卷按它自己的提交策略选答卷（复用第一阶段 scope_filter，与单份问卷统计口径一致）
 - 不显示填写人（无论问卷是否匿名）
 - 结果：合并后的总体数据 + 每份问卷各自的数据
-  - 单选 / 多选：按选项 id 合并（各版本沿用选项 id）；选项文字取参与统计的版本中版本号最大的
+  - 单选 / 多选：按选项 id 合并（各版本沿用选项 id）；选项文字取参与统计的版本中含有该选项的、版本号最大的版本；
+    在参与统计的最新版本中已被删除的选项（只在旧版本中出现）照常计数，并标注 only_in_old_versions
   - 答卷数各问卷相加；作答人数跨问卷去重
   - 数字：总体平均值按全部答案计算（不是各问卷平均值的平均）
   - 文本 / 数字内容：合并后按提交时间倒序分页，每条附问卷标题
@@ -46,31 +48,61 @@ def _version_filter(db: Database, root_id: ObjectId, version_ids: list[str] | No
     return set(ids)
 
 
-def _entries(db: Database, user_id: ObjectId, root_id: ObjectId, versions: set[ObjectId] | None) -> list[dict]:
-    """参与统计的问卷：[{survey, question（问卷中的这道题）}]，新建的问卷在前。"""
+def _candidates(db: Database, user_id: ObjectId, root_id: ObjectId) -> list[dict]:
+    """可以参与统计的问卷：[{survey, question（问卷中的这道题）}]，新建的问卷在前。"""
     entries = []
     for survey in surveys_repo.find_for_cross_stats(db, user_id, root_id, INCLUDED_STATUSES):
         q = next(q for q in survey["questions"] if (q.get("source") or {}).get("rootId") == root_id)
-        if versions is None or q["source"]["questionId"] in versions:
-            entries.append({"survey": survey, "question": q})
+        entries.append({"survey": survey, "question": q})
     return entries
 
 
+def _survey_filter(candidates: list[dict], survey_ids: list[str] | None) -> set[ObjectId] | None:
+    """按问卷筛选：必须是自己的、使用这道题的、已发布或已关闭的问卷。"""
+    if not survey_ids:
+        return None
+    allowed = {e["survey"]["_id"] for e in candidates}
+    errors, ids = [], set()
+    for i, raw in enumerate(survey_ids):
+        oid = parse_object_id(raw)
+        if oid is None or oid not in allowed:
+            errors.append({"field": f"surveyId[{i}]",
+                           "message": f"{raw} 不是使用这道题的、已发布或已关闭的你的问卷"})
+        else:
+            ids.add(oid)
+    if errors:
+        raise ValidationFailed(errors, "筛选条件不合法")
+    return ids
+
+
 def _merged_options(entries: list[dict]) -> list[dict]:
-    """各版本选项的并集：按版本号从大到小取，选项文字以版本号最大的为准，顺序也以它为准。"""
+    """参与统计的各版本选项的并集。
+
+    按版本号从大到小取：先是最新版本的选项（顺序同最新版本），之后是只在旧版本中出现的选项；
+    每个选项的文字取含有它的、版本号最大的版本。只在旧版本中出现的选项标注 only_in_old_versions。
+    """
+    ordered = sorted(entries, key=lambda e: e["question"]["source"]["version"], reverse=True)
+    if not ordered:
+        return []
+    newest_ids = {o["id"] for o in ordered[0]["question"].get("options") or []}
     merged: dict[str, str] = {}
-    for e in sorted(entries, key=lambda e: e["question"]["source"]["version"], reverse=True):
+    for e in ordered:
         for o in e["question"].get("options") or []:
             merged.setdefault(o["id"], o["text"])
-    return [{"id": oid, "text": text} for oid, text in merged.items()]
+    return [{"id": oid, "text": text, "only_in_old_versions": oid not in newest_ids}
+            for oid, text in merged.items()]
 
 
 def cross_stats(db: Database, user_id: ObjectId, question_id: str, *, version_ids: list[str] | None,
-                offset: int, limit: int) -> dict:
+                survey_ids: list[str] | None = None, offset: int = 0, limit: int = 20) -> dict:
     doc = library.get_accessible(db, user_id, question_id)
     root_id, qtype = doc["rootId"], doc["type"]
     versions = _version_filter(db, root_id, version_ids)
-    entries = _entries(db, user_id, root_id, versions)
+    candidates = _candidates(db, user_id, root_id)
+    surveys_wanted = _survey_filter(candidates, survey_ids)
+    entries = [e for e in candidates
+               if (versions is None or e["question"]["source"]["questionId"] in versions)
+               and (surveys_wanted is None or e["survey"]["_id"] in surveys_wanted)]
 
     facet: dict = {}
     if entries:
@@ -121,5 +153,6 @@ def cross_stats(db: Database, user_id: ObjectId, question_id: str, *, version_id
         "question": doc, "type": qtype,
         "title": newest["question"]["title"] if newest else doc["title"],
         "version_filter": sorted(str(v) for v in versions) if versions else None,
+        "survey_filter": sorted(str(v) for v in surveys_wanted) if surveys_wanted else None,
         "overall": overall, "surveys": surveys,
     }
