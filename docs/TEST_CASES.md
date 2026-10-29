@@ -331,13 +331,13 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 步骤 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 截图 |
 |---|---|---|---|---|---|
 | 1 | 打开编辑页 | 上述 3 道题 | 显示 3 道题，作答说明由校验规则自动生成 | 显示 3 道题，作答说明依次为“单选”“多选，至少选 1 项，最多选 2 项”“请输入 0–50 之间的整数” | ![](images/tests/edit-01-overview.png) |
-| 2 | 第 1 题点“编辑”→“＋ 添加跳转规则”，查看 3 个下拉框 | — | 运算符、选项、目标均为下拉框；目标只列出后面的题和“结束问卷” | 运算符为 [选择了, 选择了其中之一]；选项为 [喜欢, 不喜欢]；目标为 [第 2 题：你喜欢哪些水果？, 第 3 题：你每周吃几次水果？, 结束问卷] | ![](images/tests/edit-02-jump-rule.png) |
+| 2 | 第 1 题点“编辑”→“＋ 添加跳转规则”，查看 3 个下拉框 | 第 1 题“你喜欢吃水果吗？”（喜欢、不喜欢），后面为第 2 题“你喜欢哪些水果？”、第 3 题“你每周吃几次水果？” | 运算符、选项、目标均为下拉框；目标只列出后面的题和“结束问卷” | 运算符为 [选择了, 选择了其中之一]；选项为 [喜欢, 不喜欢]；目标为 [第 2 题：你喜欢哪些水果？, 第 3 题：你每周吃几次水果？, 结束问卷] | ![](images/tests/edit-02-jump-rule.png) |
 | 3 | 设置规则并保存，通过接口读取问卷 | 选项“不喜欢”，目标“第 3 题” | 保存后数据库中的规则正确 | 编辑器关闭；第 1 题 `logic` 为 `{rules: [{when: {op: "eq", value: <不喜欢的 id>}, goto: <第 3 题 id>}], defaultNext: null}` | — |
 | 4 | 编辑第 2 题，最少选择数填 5，保存 | `5`（只有 3 个选项） | 错误列在表单上方，对应输入框标红 | 错误列表中有“第 2 题：最少选择数（5）不能大于选项数（3）”；标红的输入框只有 `validation.minSelect` | ![](images/tests/edit-03-validation-error.png) |
-| 5 | 第 3 题点两次“上移” | — | 第二次使规则变成往前跳，被拒绝，错误标在对应题目上 | 第一次上移成功；第二次显示错误，题目上的错误文字为“第 2 题第 1 条规则：只能跳转到后面的题目或 END（目标是第 1 题）” | ![](images/tests/edit-04-reorder-rejected.png) |
+| 5 | 第 3 题点两次“上移” | 第 3 题“你每周吃几次水果？”；第 1 题已有规则“不喜欢 → 第 3 题” | 第二次使规则变成往前跳，被拒绝，错误标在对应题目上 | 第一次上移成功；第二次显示错误，题目上的错误文字为“第 2 题第 1 条规则：只能跳转到后面的题目或 END（目标是第 1 题）” | ![](images/tests/edit-04-reorder-rejected.png) |
 | 6 | 点“＋ 文本填空”，填标题，点“添加” | 标题“其他建议” | 添加成功 | 编辑器关闭，列表中有 4 道题 | — |
-| 7 | 通过接口发布后重新打开编辑页 | — | 题目只读，提交策略和匿名设置锁定 | 发布返回 200；页面上没有题目操作按钮，“添加题目”栏隐藏，提交策略输入框为禁用（匿名设置的锁定只在截图中可见，没有单独断言） | — |
-| 8 | 窗口改为 390×800 后打开编辑页 | — | 手机尺寸显示正常 | 页面加载完成并截图（无布局断言） | — |
+| 7 | 通过接口发布后重新打开编辑页 | `ui_editor` 的令牌，POST `/api/surveys/{id}/publish`（问卷有 4 道题） | 题目只读，提交策略和匿名设置锁定 | 发布返回 200；页面上没有题目操作按钮，“添加题目”栏隐藏，提交策略输入框为禁用（匿名设置的锁定只在截图中可见，没有单独断言） | — |
+| 8 | 窗口改为 390×800 后打开编辑页 | 窗口 390×800；同一份已发布的问卷 | 手机尺寸显示正常 | 页面加载完成并截图（无布局断言） | — |
 
 ### K2. 填写页（15 步，全部通过）
 
@@ -346,7 +346,7 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 步骤 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 截图 |
 |---|---|---|---|---|---|
 | 1 | 未登录打开 `/survey/<shortCode>`，在登录页登录 | `ui_filler` / `uitest123` | 跳到登录页并提示；登录后自动回到原问卷 | 地址变为 `/login?next=%2Fsurvey%2F<shortCode>`，页面提示“登录后将自动打开你要填写的问卷”；登录后地址为 `/survey/<shortCode>` | ![](images/tests/fill-01-login-redirect.png) |
-| 2 | 查看初始状态 | — | 只显示第 1 题，显示匿名提示，进度 0% | 只显示第 1 题；进度条宽度 0%；提示中有“本问卷为匿名问卷，创建者看不到你的身份” | — |
+| 2 | 查看初始状态 | `ui_filler` / `uitest123` 登录后回到水果问卷（latest、匿名） | 只显示第 1 题，显示匿名提示，进度 0% | 只显示第 1 题；进度条宽度 0%；提示中有“本问卷为匿名问卷，创建者看不到你的身份” | — |
 | 3 | 第 1 题点“不喜欢” | 不喜欢 | 立即计算，跳到第 5 题；第 2~4 题不显示，题号保持原编号 | 显示的题号为 [1, 5]；第 5 题显示“跳过此题” | ![](images/tests/fill-02-jump-to-q5.png) |
 | 4 | 第 1 题改点“喜欢” | 喜欢 | 第 5 题收起、第 2 题出现 | 显示的题号为 [1, 2] | — |
 | 5 | 第 2 题依次点“苹果”“榴莲” | 苹果、榴莲 | 多选停顿后才计算，进入第 3 题 | 点完立即检查仍为 [1, 2]；停顿后为 [1, 2, 3] | — |
@@ -355,9 +355,9 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 8 | 第 4 题改成 7；点第 5 题“跳过此题” | 7 | 第 5 题出现、可跳过，跳过后出现“提交” | 显示 [1, 2, 3, 4, 5]，提交栏隐藏；跳过后提交栏出现 | — |
 | 9 | 第 2 题取消“榴莲”，再选回 | 榴莲 | 第 3 题收起后恢复原内容 | 取消后显示 [1, 2, 4, 5]；选回后显示 [1, 2, 3, 4, 5]，第 3 题内容仍为“闻着臭吃着香” | — |
 | 10 | 让下一次预览请求延迟 1.2 秒；第 1 题快速点“不喜欢”再点“喜欢”，等 1.8 秒 | 第一次请求延迟 1.2 秒，第二次立即返回 | 页面只采用最后一次请求的结果 | 仍显示 [1, 2, 3, 4, 5]（较晚返回的“不喜欢”结果没有覆盖） | — |
-| 11 | 点“提交”；创建者通过接口读取答卷列表 | — | 感谢页；只保存路径上作答的题；匿名问卷答卷列表不含填写人 | 页面显示“感谢填写！”；答卷列表 `total` 为 1，保存的题目为第 1–4 题（第 5 题跳过未答）；答卷中没有 `username` | ![](images/tests/fill-05-thanks.png) |
-| 12 | 再次打开问卷链接 | — | latest 策略预填上次答案，并直接展开到上次答过的位置 | 显示 [1, 2, 3, 4, 5]，第 5 题显示“跳过此题”，提交栏隐藏；第 3 题为“闻着臭吃着香”，第 4 题为“7”；提示以“已为你填入上次提交的答案”开头 | ![](images/tests/fill-06-latest-prefill.png) |
-| 13 | 创建者通过接口关闭问卷后打开链接 | — | 只显示“问卷已关闭”提示，不显示题目 | 提示中有“问卷已关闭，不再接受填写”；题目数为 0 | ![](images/tests/fill-07-closed.png) |
+| 11 | 点“提交”；创建者通过接口读取答卷列表 | 已作答：喜欢 / [苹果, 榴莲] / “闻着臭吃着香” / 7，第 5 题跳过；`ui_owner` 调用 GET `/api/surveys/{id}/responses` | 感谢页；只保存路径上作答的题；匿名问卷答卷列表不含填写人 | 页面显示“感谢填写！”；答卷列表 `total` 为 1，保存的题目为第 1–4 题（第 5 题跳过未答）；答卷中没有 `username` | ![](images/tests/fill-05-thanks.png) |
+| 12 | 再次打开问卷链接 | `ui_filler` 再次打开同一问卷链接 | latest 策略预填上次答案，并直接展开到上次答过的位置 | 显示 [1, 2, 3, 4, 5]，第 5 题显示“跳过此题”，提交栏隐藏；第 3 题为“闻着臭吃着香”，第 4 题为“7”；提示以“已为你填入上次提交的答案”开头 | ![](images/tests/fill-06-latest-prefill.png) |
+| 13 | 创建者通过接口关闭问卷后打开链接 | `ui_owner` POST `/api/surveys/{id}/close` | 只显示“问卷已关闭”提示，不显示题目 | 提示中有“问卷已关闭，不再接受填写”；题目数为 0 | ![](images/tests/fill-07-closed.png) |
 | 14 | 创建者登录，打开自己的水果问卷草稿；选“不喜欢”，跳过第 5 题 | 不喜欢 | 可以预览跳转，提交按钮禁用 | 提示中有“预览模式：问卷尚未发布，不能提交”；显示 [1, 5]；走到结尾后提交按钮为禁用 | — |
 | 15 | 窗口改为 390×800，打开草稿，选“喜欢” | 喜欢 | 手机尺寸显示正常 | 显示 [1, 2]，截图（无布局断言） | — |
 
@@ -368,12 +368,12 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 步骤 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 截图 |
 |---|---|---|---|---|---|
 | 1 | 创建者 `ui_stats_owner` 打开统计页 | 上述 26 份答卷 | 答卷数 26、填写人数 4 和统计口径 | 顶部为“26 答卷数”“4 填写人数”；口径以“统计口径：全部答卷（含同一人的多次提交）”开头 | — |
-| 2 | 查看第 1、2 题的柱状条 | — | 显示人数（次数）和百分比，没人选的显示 0；同题各选项底槽等宽 | 第 1 题“3 人（11.5%）”“23 人（88.5%）”，说明为“单选题 · 答卷数 26 · 作答人数 4”，第一根柱宽 11.5%；第 2 题“2 次（66.7%）”“2 次（66.7%）”“0 次（0%）”“1 次（33.3%）”，4 个底槽宽度相同 | — |
-| 3 | 查看第 3、4 题 | — | 平均值 3.33 和全部填写内容；实名问卷显示填写人用户名 | 第 4 题平均值“3.33”，内容为 [0, 3, 7]；第 3 题填写人为 [u_zhang] | ![](images/tests/stats-01-overview.png) |
-| 4 | 第 5 题点“加载更多” | — | 先显示 20 条，加载后 24 条 | 先 20 条，按钮文字为“加载更多（已显示 20 / 24）”；点击后 24 条，按钮隐藏 | — |
-| 5 | 切到“答卷列表”，点“加载更多” | — | 从新到旧，选项显示为文字，加载更多后 26 份 | 先 20 份，摘要以“共 26 份答卷”开头，最后一份中没有 `o_` 开头的选项 id；加载后 26 份，最早的一份含“第 1 份”“u_zhang”“苹果、榴莲”“闻着臭吃着香” | ![](images/tests/stats-02-responses.png) |
+| 2 | 查看第 1、2 题的柱状条 | 上述 26 份答卷（第 1、2 题） | 显示人数（次数）和百分比，没人选的显示 0；同题各选项底槽等宽 | 第 1 题“3 人（11.5%）”“23 人（88.5%）”，说明为“单选题 · 答卷数 26 · 作答人数 4”，第一根柱宽 11.5%；第 2 题“2 次（66.7%）”“2 次（66.7%）”“0 次（0%）”“1 次（33.3%）”，4 个底槽宽度相同 | — |
+| 3 | 查看第 3、4 题 | 上述 26 份答卷（第 3、4 题） | 平均值 3.33 和全部填写内容；实名问卷显示填写人用户名 | 第 4 题平均值“3.33”，内容为 [0, 3, 7]；第 3 题填写人为 [u_zhang] | ![](images/tests/stats-01-overview.png) |
+| 4 | 第 5 题点“加载更多” | 第 5 题的 24 条内容；点击“加载更多（已显示 20 / 24）” | 先显示 20 条，加载后 24 条 | 先 20 条，按钮文字为“加载更多（已显示 20 / 24）”；点击后 24 条，按钮隐藏 | — |
+| 5 | 切到“答卷列表”，点“加载更多” | 上述 26 份答卷；点击“答卷列表”标签和“加载更多答卷” | 从新到旧，选项显示为文字，加载更多后 26 份 | 先 20 份，摘要以“共 26 份答卷”开头，最后一份中没有 `o_` 开头的选项 id；加载后 26 份，最早的一份含“第 1 份”“u_zhang”“苹果、榴莲”“闻着臭吃着香” | ![](images/tests/stats-02-responses.png) |
 | 6 | 新建匿名水果问卷，u_zhang 提交后打开统计页和答卷列表 | 不喜欢 → “匿名的意见” | 统计和答卷列表中都不出现填写人 | 页面文字中没有“u_zhang”；填写人元素 0 个；页面中有“匿名的意见” | ![](images/tests/stats-03-anonymous.png) |
-| 7 | 窗口改为 390×800 后打开统计页 | — | 手机尺寸显示正常 | 5 道题的统计都已显示，截图（无布局断言） | — |
+| 7 | 窗口改为 390×800 后打开统计页 | 窗口 390×800；同一份问卷的统计页 | 手机尺寸显示正常 | 5 道题的统计都已显示，截图（无布局断言） | — |
 
 ## 六、手工测试
 
@@ -432,7 +432,7 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 2A2 | 拒绝不合法文档 | 直接插入 17 种不合法文档 | 版本的 `validation` 含 `required`；非法题型；版本号 0；`rootId`、`parentId` 为字符串；空标题；`sharing` 缺 `userIds` 或存用户名；`lockedAt` 为字符串；缺 `sharing`；题库空名称、缺 `items`、条目缺 `rootId`、`public` 为字符串；问卷题目的 `source` 缺 `rootId`、类型错误、版本号 0 | 数据库拒绝（错误码 121） | 17 种全部被拒，错误码 121 | `test_invalid_phase2_documents_rejected` |
 | 2A3 | 兼容第一阶段 | 写入没有 `source` 的问卷并更新；在已有第一阶段数据的库上重新初始化 | 第一阶段格式的问卷 | 照常写入、更新；重新初始化后旧问卷仍可更新 | 写入、更新成功，题目中没有 `source`；重新初始化后更新的 `modified_count` 为 1 | `test_phase1_survey_without_source_still_valid`、`test_ensure_schema_on_existing_phase1_data` |
 | 2A4 | 索引与使用 | 查看索引；用 `explain` 查看 6 种查询的执行计划 | 按版本、按题目查问卷；按 `restoredFrom`、`parentId` 查版本；按条目查题库；查公开题目 | 索引与设计文档 10.10 一致；查询都使用对应索引 | 新索引的字段、唯一性、部分过滤条件与设计一致；执行计划中分别出现 `questions_source_questionId`、`questions_source_rootId_ownerId`、`restoredFrom`、`parentId`、`items_questionId`、`sharing_public` | `test_phase2_indexes_match_design`、`test_usage_queries_use_indexes` |
-| 2A5 | 版本号不重复 | 同一道题插入两个 v2；不同题各有 v1 | — | 同一道题重复时报错；不同题可以相同 | 第二个 v2 抛出 `DuplicateKeyError`；两道题的 v1 都写入成功 | `test_version_number_unique_within_question`、`test_same_version_number_allowed_in_different_questions` |
+| 2A5 | 版本号不重复 | 同一道题插入两个 v2；不同题各有 v1 | 年龄题版本文档（`type: number`，`min 0`、`max 150`、整数）：同一 `rootId` 下两次插入 `version: 2`；另外两个独立文档各为 `version: 1` | 同一道题重复时报错；不同题可以相同 | 第二个 v2 抛出 `DuplicateKeyError`；两道题的 v1 都写入成功 | `test_version_number_unique_within_question`、`test_same_version_number_allowed_in_different_questions` |
 
 ### 2B. 题目与版本
 
@@ -446,16 +446,16 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 2B6 | 选项 id 沿用 | 性别 v1 派生 v2，再派生 v3 | v2：“女”改为“女性”、删除“男”、新增“不愿透露”；v3：用 v1 中“男”的 id；v3：新增“男” | 保留的选项 id 不变；新选项 id 不与这道题任何版本用过的 id 重复；不能拿回已删除选项的 id | v2 第 1 项为 `{id: 女的 id, text: "女性"}`，新增项 id 不同于“男”“女”；用“男”的旧 id 返回 422；v3 新增“男”的 id 不同于三个旧 id | `test_derive_keeps_option_ids`、`test_question_versions.py::test_kept_options_keep_ids_new_options_get_new_ids` |
 | 2B7 | 直接修改未锁定的版本 | PUT 修改性别 v1 | 题目“你的性别”，保留“男”的 id，新增“其他” | 200，仍是 v1，保留的 id 不变，`updatedAt` 变大 | 200；`version` 1，第 1 个选项 id 不变，`updatedAt` 大于修改前 | `test_update_unlocked_version` |
 | 2B8 | 锁定后不能直接修改、可以派生 | 版本加锁后 PUT；再派生 | 改题目 | 409 `QUESTION_LOCKED`；派生成功 | PUT 409 `QUESTION_LOCKED`，详情 `locked` true；派生 201，`version` 2 | `test_update_locked_version_rejected`、`test_derive_from_locked_version_allowed` |
-| 2B9 | 编辑冲突 | 修改一次后，用旧的 `expectedUpdatedAt` 再修改 | — | 409 `EDIT_CONFLICT` | 409 `EDIT_CONFLICT` | `test_update_expected_updated_at` |
+| 2B9 | 编辑冲突 | 修改一次后，用旧的 `expectedUpdatedAt` 再修改 | alice 的年龄 v1；第一次 PUT `{"title": "第一次"}`；第二次 PUT `{"title": "第二次"}`，查询参数 `expectedUpdatedAt` 为 v1 创建时的 `updatedAt` | 409 `EDIT_CONFLICT` | 409 `EDIT_CONFLICT` | `test_update_expected_updated_at` |
 | 2B10 | 恢复旧版本 | v1 → v2（改坏了），恢复 v1 | 不指定父版本 | 生成 v3，内容同 v1，接在 v2 后面，`restoredFrom` = v1；v2 不变 | v3：`restoredFrom` v1、`parentId` v2，题目和校验与 v1 相同；v2 标题仍为“改坏了” | `test_restore_old_version` |
 | 2B11 | 恢复时指定父版本、选项 id | 指定接在 v2 后面；性别恢复；用另一道题作父版本 | `{"parentId": v2}` | 接在指定版本后；选项 id 与原版本相同；父版本必须是同一道题 | `parentId` 为 v2；恢复后的选项与 v1 完全相同；另一道题作父版本 422 | `test_restore_with_explicit_parent`、`test_restore_keeps_option_ids`、`test_restore_parent_must_be_same_question` |
 | 2B12 | 删除规则 | 删除各种版本 | 未使用的末端版本；有子版本的；已锁定的；在别人题库中的；只是恢复来源的 | 只有第一种可以删；其余 409 并说明原因 | 删除 204 后再查 404；其余依次为 409 `QUESTION_HAS_CHILDREN`、`QUESTION_LOCKED`、`QUESTION_IN_BANK`、`QUESTION_HAS_CHILDREN` | `test_delete_unused_leaf_version`、`test_delete_rules`、`test_restored_from_counts_as_child` |
 | 2B13 | 详情给出能否删除及原因 | 各种状态的版本查看详情 | 未使用；有子版本；已锁定；在题库中；别人查看 | 所有者看到 `canDelete` 和原因（与删除接口一致）；别人看不到 | 依次为 (true, null)、(false, 含“派生”)、(false, 含“已被问卷使用”)、(false, 含“题库”)，最后一种与删除接口的 message 相同；别人为 (null, null) | `test_detail_reports_delete_block` |
 | 2B14 | 列表 | 不同范围、分页、按题目分组 | `scope` = mine / shared / public / all / everyone；`limit=2&offset=1`；一道题 3 个版本 | 各范围正确，公开列表不含自己的；分组列表同一道题一项、代表版本为最新 | 4 个范围的结果与预期相同，`everyone` 422；分页总数 5、本页 [题 3, 题 2]；分组后 2 项，代表版本 v3，版本列表 [v1, v2, v3] | `test_list_scopes`、`test_list_pagination`、`test_grouped_list_one_item_per_question`、`test_grouped_list_scopes` |
-| 2B15 | 无权访问与不存在相同 | bob 对 alice 未共享的题和一个不存在的 id 查看、修改、删除、恢复 | — | 两者返回完全相同的 404 | 8 次都是 404 `{"code": "QUESTION_NOT_FOUND", "message": "题目不存在"}`；alice 的题未被修改 | `test_no_access_looks_like_not_found`、`test_others_cannot_see_private_question` |
-| 2B16 | 版本号并发 | 模拟取号后被占用；模拟一直冲突 | — | 重新取号后成功；超过重试次数 409 | 第二次取号得到 v2；一直冲突时 409 `VERSION_CONFLICT`，没有多出版本 | `test_version_number_retry_on_conflict`、`test_phase2_edge_cases.py::test_version_number_retries_exhausted` |
-| 2B17 | 派生与删除同时发生 | 插入新版本后父版本被删除 | — | 撤销新版本，返回 404 | 404，`questions` 集合为空 | `test_derive_undone_if_parent_deleted_concurrently` |
-| 2B18 | 修改时被加锁 / 被别人修改 / 被删除 | 在读取之后、写回之前分别发生 | — | 409 `QUESTION_LOCKED`；409 `EDIT_CONFLICT`（不覆盖别人的修改）；404 | 依次如期望；第二种情况下题目仍为“另一个请求改的” | `test_phase2_edge_cases.py::test_update_version_locked_meanwhile` 等 3 个 |
+| 2B15 | 无权访问与不存在相同 | bob 对 alice 未共享的题和一个不存在的 id 查看、修改、删除、恢复 | alice 未共享的年龄 v1 和一个随机 ObjectId；bob 依次 GET、PUT（年龄题内容）、DELETE、POST `/restore`；bob 恢复自己的题时 `{"parentId": alice 的 v1}` | 两者返回完全相同的 404 | 8 次都是 404 `{"code": "QUESTION_NOT_FOUND", "message": "题目不存在"}`；alice 的题未被修改 | `test_no_access_looks_like_not_found`、`test_others_cannot_see_private_question` |
+| 2B16 | 版本号并发 | 模拟取号后被占用；模拟一直冲突 | 年龄 v1 派生 `{"title": "v2"}`；模拟取号函数第一次返回 0（取到已被占用的版本号 1）；或每次都返回 0 | 重新取号后成功；超过重试次数 409 | 第二次取号得到 v2；一直冲突时 409 `VERSION_CONFLICT`，没有多出版本 | `test_version_number_retry_on_conflict`、`test_phase2_edge_cases.py::test_version_number_retries_exhausted` |
+| 2B17 | 派生与删除同时发生 | 插入新版本后父版本被删除 | 年龄 v1 派生 `{"title": "v2"}`；新版本插入后删除 v1 | 撤销新版本，返回 404 | 404，`questions` 集合为空 | `test_derive_undone_if_parent_deleted_concurrently` |
+| 2B18 | 修改时被加锁 / 被别人修改 / 被删除 | 在读取之后、写回之前分别发生 | alice 直接修改年龄 v1 `{"title": "改"}`；读取之后分别：给 v1 置上 `lockedAt`；把 v1 的题目改为“另一个请求改的”；删除 v1 | 409 `QUESTION_LOCKED`；409 `EDIT_CONFLICT`（不覆盖别人的修改）；404 | 依次如期望；第二种情况下题目仍为“另一个请求改的” | `test_phase2_edge_cases.py::test_update_version_locked_meanwhile` 等 3 个 |
 
 ### 2C. 共享
 
@@ -464,58 +464,58 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 2C1 | 共享给指定用户 | alice PUT `/api/questions/{id}/sharing` | `{"public": false, "usernames": ["bob"]}` | bob 能看到、能派生自己的版本，carol 看不到 | 返回 `updatedVersions` 1、`usernames` ["bob"]；bob 200、carol 404；bob 的“共享给我的”只有这一项；bob 派生的版本 `owner` 为 bob | `test_question_sharing.py::test_share_with_user` |
 | 2C2 | 以整道题为单位 | alice 有 v1、v2、v3，通过 v2 设置共享 | 共享给 bob | 3 个版本一起共享，另一道题不受影响 | `updatedVersions` 3，bob 能看到 3 个版本，看不到另一道题 | `test_share_covers_all_own_versions_in_question` |
 | 2C3 | 别人的版本属于别人 | bob 派生后，alice 改共享；bob 公开自己的版本 | alice 共享给 bob、carol | bob 的版本默认不共享，不受 alice 影响；bob 可以单独共享 | bob 的版本 `sharing` 为空；alice 改共享只更新 1 个版本，carol 看不到 bob 的版本；bob 公开后 carol 能看到，alice 的 v1 仍不公开 | `test_share_does_not_touch_others_versions_in_same_question` |
-| 2C4 | 公开、取消共享、整体替换 | 设为公开；取消；先共享给 bob、carol 再只给 carol | — | 公开后所有人可见；取消后看不到，bob 自己的版本仍在，历史中显示占位；整体替换 | 公开后 bob 在“公开的”中看到；取消后 bob 404，bob 看到的历史为 [不可访问, 可访问]；只给 carol 后 bob 看不到 | `test_public_question`、`test_unshare`、`test_sharing_replaces_whole_setting` |
-| 2C5 | 新版本继承共享设置 | 共享后派生、恢复；模拟派生时恰好取消共享 | — | 新版本继承自己的共享设置；并发时与其他版本对齐 | 派生和恢复的版本 `usernames` 都是 ["bob"]；并发情况下新版本 `userIds` 为空，bob 看不到 | `test_new_versions_inherit_sharing`、`test_concurrent_sharing_change_is_applied_to_new_version` |
-| 2C6 | 权限 | carol（看不到）、bob（被共享）修改共享 | — | carol 404；bob 403 `NOT_OWNER` | 如期望；carol 仍看不到 | `test_only_owner_can_change_sharing` |
-| 2C7 | 共享名单只给所有者 | alice、bob 分别查看详情、列表、历史 | — | 所有者看到名单；被共享的人三处都看不到 | alice 看到 ["bob"]；bob 在详情、列表、历史中 `sharing` 均为 null | `test_shared_list_only_visible_to_owner` |
+| 2C4 | 公开、取消共享、整体替换 | 设为公开；取消；先共享给 bob、carol 再只给 carol | alice 的年龄 v1：`{"public": true, "usernames": []}`；`{"public": true, "usernames": ["bob"]}` 后 bob 派生“bob 的版本”，再 `{"public": false, "usernames": []}`；先 `["bob", "carol"]` 再 `["carol"]` | 公开后所有人可见；取消后看不到，bob 自己的版本仍在，历史中显示占位；整体替换 | 公开后 bob 在“公开的”中看到；取消后 bob 404，bob 看到的历史为 [不可访问, 可访问]；只给 carol 后 bob 看不到 | `test_public_question`、`test_unshare`、`test_sharing_replaces_whole_setting` |
+| 2C5 | 新版本继承共享设置 | 共享后派生、恢复；模拟派生时恰好取消共享 | alice 共享给 `["bob"]` 后派生 `{"title": "v2"}`、恢复 v1；并发：派生 v2 时在插入前把共享改为 `{"public": false, "userIds": []}` | 新版本继承自己的共享设置；并发时与其他版本对齐 | 派生和恢复的版本 `usernames` 都是 ["bob"]；并发情况下新版本 `userIds` 为空，bob 看不到 | `test_new_versions_inherit_sharing`、`test_concurrent_sharing_change_is_applied_to_new_version` |
+| 2C6 | 权限 | carol（看不到）、bob（被共享）修改共享 | alice 的年龄 v1；carol 提交 `{"usernames": ["carol"]}`；alice 共享给 bob 后，bob 提交 `{"usernames": ["carol"]}` | carol 404；bob 403 `NOT_OWNER` | 如期望；carol 仍看不到 | `test_only_owner_can_change_sharing` |
+| 2C7 | 共享名单只给所有者 | alice、bob 分别查看详情、列表、历史 | alice 把年龄 v1 共享给 `["bob"]`；alice、bob 分别 GET 详情；bob GET `/api/questions?scope=shared` 和 `/history` | 所有者看到名单；被共享的人三处都看不到 | alice 看到 ["bob"]；bob 在详情、列表、历史中 `sharing` 均为 null | `test_shared_list_only_visible_to_owner` |
 | 2C8 | 输入检查 | 各种不合法的共享请求 | 不存在的用户；共享给自己；`public: "yes"`；缺 `usernames`；101 个用户名；`[" bob ", "bob"]` | 前 5 种 422 且原设置不变；最后一种去空格、去重 | 前 5 种 422（第一种 errors 为 `[{"field": "usernames[0]", "message": "用户「nobody」不存在"}]`），原设置仍为空；最后一种保存为 ["bob"] | `test_share_input_validation`、`test_share_strips_and_dedups_usernames` |
-| 2C9 | 共享不改 `updatedAt` | 设为公开后查看，再用原来的 `expectedUpdatedAt` 修改 | — | `updatedAt` 不变，修改不冲突 | `updatedAt` 与共享前相同；修改 200 | `test_sharing_does_not_change_updated_at` |
+| 2C9 | 共享不改 `updatedAt` | 设为公开后查看，再用原来的 `expectedUpdatedAt` 修改 | alice 的年龄 v1 设为 `{"public": true}`；再 PUT `{"title": "改"}`，`expectedUpdatedAt` 为共享前的 `updatedAt` | `updatedAt` 不变，修改不冲突 | `updatedAt` 与共享前相同；修改 200 | `test_sharing_does_not_change_updated_at` |
 
 ### 2D. 问卷使用已保存的题
 
 | 编号 | 测试点 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 自动测试 |
 |---|---|---|---|---|---|---|
 | 2D1 | 复制快照并加锁 | POST `/api/surveys/{id}/questions/from-library`，再查数据库 | 性别 v1，`required: true` | 内容是副本、选项 id 沿用、必答由问卷决定、记录 `source`、版本加锁 | 题目 `options` 与 v1 相同，`validation` 为 `{"required": true}`，`source` 为 `{questionId: v1, rootId, version: 1}`，题目 id 由问卷生成，没有 `logic`；v1 `locked` true；数据库中 `source.questionId` 为 ObjectId | `test_survey_library.py::test_add_from_library_copies_snapshot` |
-| 2D2 | 位置和默认值 | 插入到第 2 题；位置 9 | — | 插入到指定位置；必答默认 false；位置越界 422 | 题目顺序 [第一题, 你的年龄, 第二题]，`required` false；位置 9 返回 422 | `test_add_from_library_defaults_and_position` |
-| 2D3 | 同一道题只出现一次 | 已加入 v1 后再加 v1、v2 | — | 409，被拒的版本不加锁 | 两次都是 409 `QUESTION_ALREADY_IN_SURVEY`；v2 `locked` false | `test_one_survey_can_use_a_question_once` |
-| 2D4 | 一道题用在多份问卷、不同版本（需求一、五） | A 问卷用 v1，B 问卷用 v2 | — | 各自是对应版本的内容 | A 的题目为“你的年龄”，B 为“你的年龄（周岁）” | `test_same_question_in_many_surveys` |
+| 2D2 | 位置和默认值 | 插入到第 2 题；位置 9 | 草稿中已有文本题“第一题”“第二题”；加入年龄 v1，`position: 2`（不传 `required`）；再加入性别 v1，`position: 9` | 插入到指定位置；必答默认 false；位置越界 422 | 题目顺序 [第一题, 你的年龄, 第二题]，`required` false；位置 9 返回 422 | `test_add_from_library_defaults_and_position` |
+| 2D3 | 同一道题只出现一次 | 已加入 v1 后再加 v1、v2 | 年龄 v1 和派生的 v2（`title: "v2"`）；问卷已加入 v1，再分别加入 v1、v2 | 409，被拒的版本不加锁 | 两次都是 409 `QUESTION_ALREADY_IN_SURVEY`；v2 `locked` false | `test_one_survey_can_use_a_question_once` |
+| 2D4 | 一道题用在多份问卷、不同版本（需求一、五） | A 问卷用 v1，B 问卷用 v2 | 年龄 v1、v2（题目“你的年龄（周岁）”）；问卷 A 加入 v1，问卷 B 加入 v2 | 各自是对应版本的内容 | A 的题目为“你的年龄”，B 为“你的年龄（周岁）” | `test_same_question_in_many_surveys` |
 | 2D5 | 权限、状态、选项 id 冲突、题目上限 | 分别添加 | 未共享的题；共享后；往别人的问卷加；已发布问卷；与问卷中选项 id 相同；问卷已有 100 道题 | 404；201（别人共享的题也加锁）；404；409 `INVALID_STATUS`；409 `OPTION_ID_CONFLICT`；422；加锁前能发现的错误不加锁 | 依次如期望；未共享、已发布、100 道题时版本 `locked` 仍为 false；选项冲突时问卷题目数不变 | `test_permissions`、`test_only_draft`、`test_option_id_conflict_rejected`、`test_question_limit_checked_before_locking` |
 | 2D6 | 只能改必答和跳转 | 修改来自已保存题目的题 | 改必答并设跳转；改题目；加选项；改选项文字；删选项；改题型；改数字范围 | 第一种 200，`source` 保留；其余 422 | 第一种 200，`required` true、`logic` 正确、`source.questionId` 不变；改内容的 5 种都是 422、错误字段 `source`，改题型 422；问卷中直接建的题仍可改题目 | `test_library_question_only_required_and_logic_editable`、`test_library_number_validation_not_editable` |
 | 2D7 | `source` 由系统维护 | 添加、修改题目时请求中带 `source` | 伪造的 `source` | 422 | 两种请求都是 422 | `test_source_field_cannot_be_written_by_client` |
 | 2D8 | 修改题目不影响已有问卷（需求三） | 问卷发布后直接修改所用版本；派生新版本；查看问卷 | 改题目为“今年的问法” | 直接修改 409；派生成功；问卷内容不变 | 409 `QUESTION_LOCKED`；派生 201；问卷题目仍为“你的年龄” | `test_changing_question_does_not_change_existing_survey` |
-| 2D9 | 锁定是永久的 | 从问卷删除这道题、删除草稿问卷后查看版本 | — | 仍锁定，不能删除 | 两次查看 `locked` 都为 true；删除版本 409 | `test_lock_is_permanent` |
-| 2D10 | 先加锁再复制 | 加锁之后到来的直接修改；加锁前版本被删除 | — | 修改失败，问卷中的副本与版本内容一致；版本被删除时 404 且问卷不变 | 修改 409，问卷题目与版本标题相同；版本被删除时 404，问卷题目仍为空 | `test_lock_before_copy_blocks_concurrent_edit`、`test_phase2_edge_cases.py::test_add_to_survey_when_version_deleted_meanwhile` |
+| 2D9 | 锁定是永久的 | 从问卷删除这道题、删除草稿问卷后查看版本 | 年龄 v1 加入草稿问卷“年度调查”；DELETE 问卷中的这道题；DELETE 这份问卷；DELETE `/api/questions/{v1}` | 仍锁定，不能删除 | 两次查看 `locked` 都为 true；删除版本 409 | `test_lock_is_permanent` |
+| 2D10 | 先加锁再复制 | 加锁之后到来的直接修改；加锁前版本被删除 | 加入年龄 v1：加锁之后到来的 PUT `{"title": "并发修改"}`；另一次在加锁前删除 v1 | 修改失败，问卷中的副本与版本内容一致；版本被删除时 404 且问卷不变 | 修改 409，问卷题目与版本标题相同；版本被删除时 404，问卷题目仍为空 | `test_lock_before_copy_blocks_concurrent_edit`、`test_phase2_edge_cases.py::test_add_to_survey_when_version_deleted_meanwhile` |
 | 2D11 | 换版本（需求七） | 性别 v1（必答、设了跳转）换成 v2 | v2：“女”改为“女性”，新增“其他” | 题目 id、必答、跳转保留，内容换成 v2，`source` 更新，v2 加锁 | 题目 id 不变、题目“你的性别”、3 个选项、`required` true、`logic` 不变、`source.version` 2、v2 `locked` true | `test_switch_version_keeps_id_required_and_logic` |
-| 2D12 | 换版本被拒绝 | 跳转规则用到的选项在新版本中被删除；换成另一道题；问卷中直接建的题；不存在的题；发布后 | — | 422（错误中含被删除的选项）；422；409 `NOT_FROM_LIBRARY`；404；409 `INVALID_STATUS`，新版本不加锁 | 依次如期望；第一种情况下问卷仍为 v1；换成当前版本时原样返回 | `test_switch_rejected_when_rule_option_missing`、`test_switch_version_errors` |
+| 2D12 | 换版本被拒绝 | 跳转规则用到的选项在新版本中被删除；换成另一道题；问卷中直接建的题；不存在的题；发布后 | 性别 v1 在问卷中设规则“男 → END”，v2 只保留“女”；年龄题换成性别 v1；问卷中直接建的“直接建的题”；题目 id `q_nothere`；问卷发布后换成年龄 v2 | 422（错误中含被删除的选项）；422；409 `NOT_FROM_LIBRARY`；404；409 `INVALID_STATUS`，新版本不加锁 | 依次如期望；第一种情况下问卷仍为 v1；换成当前版本时原样返回 | `test_switch_rejected_when_rule_option_missing`、`test_switch_version_errors` |
 | 2D13 | 填写、跳转、校验、统计照常 | 发布含两道已保存题目和一道直接建的题的问卷，bob 填写 | 选“女” → 结束；年龄 200；完整合法的答案 | 填写者看不到 `source`；校验、跳转、统计正常 | 填写者看到的题目字段为 {id, type, title, options, validation}（与第一阶段相同），没有 `source`；年龄 200 返回 422；合法答案 201；统计中性别 [1, 0]、年龄平均 20 | `test_fill_and_stats_with_library_questions`、`test_respondent_view_whitelist_unchanged` |
-| 2D14 | 第一阶段格式的问卷不受影响 | 问卷中直接建题、修改、发布 | — | 行为与第一阶段相同，不产生“我的题目”记录 | 修改后题目没有 `source`；发布成功；`questions` 集合为空 | `test_phase1_style_survey_unaffected` |
+| 2D14 | 第一阶段格式的问卷不受影响 | 问卷中直接建题、修改、发布 | 问卷中直接添加数字题 `{"title": "旧题", "validation": {"min": 0}}`；改为 `{"title": "旧题改名", "validation": {"required": true, "min": 1}}`；发布 | 行为与第一阶段相同，不产生“我的题目”记录 | 修改后题目没有 `source`；发布成功；`questions` 集合为空 | `test_phase1_style_survey_unaffected` |
 
 ### 2E. 问卷中的题存入“我的题目”
 
 | 编号 | 测试点 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 自动测试 |
 |---|---|---|---|---|---|---|
 | 2E1 | 存入草稿中的题 | POST `/api/surveys/{id}/questions/{qid}/save-to-library` | 水果问卷第 2 题（多选，必答，1–3 项，有跳转） | 生成 v1（锁定、不共享、选项 id 沿用、校验去掉 required、不含跳转）；原题只多 `source` | v1：`version` 1、`locked` true、`options` 与原题相同、`validation` 为 `{"minSelect": 1, "maxSelect": 3}`，数据库中没有 `logic`；原题去掉 `source` 后与存入前完全相同，`source` 指向 v1；问卷 `updatedAt` 变大 | `test_save_to_library.py::test_save_draft_question` |
-| 2E2 | 已发布、已关闭、第一阶段格式的问卷 | 分别存入：有答卷的已发布问卷、已关闭问卷、直接以第一阶段格式写入的问卷 | — | 都可以；状态、内容、统计不变；之后仍可填写 | 状态分别仍为 published、closed；统计与存入前完全相同；存入后再提交 201；第一阶段格式的题去掉 `source` 后与原来相同 | `test_save_from_published_survey_keeps_responses`、`test_save_from_closed_survey`、`test_save_phase1_survey_written_directly` |
-| 2E3 | 存入后的行为 | 在草稿中改题目；直接修改 v1；派生；同一份问卷再加；另一份问卷使用 | — | 只能改必答；v1 不能直接改；可派生；同一问卷 409；别的问卷可用且选项 id 相同 | 改题目 422；直接修改 409；派生得到 v2；再加 409；另一份问卷 201，选项与原题相同 | `test_saved_question_is_restricted_in_draft`、`test_saved_version_can_be_reused_and_derived` |
-| 2E4 | 拒绝的情况 | 存两次；存来自已保存题目的题；别人的问卷；不存在的题或问卷；未登录 | — | 409 `ALREADY_IN_LIBRARY`；404；401；不产生多余的版本 | 如期望；`questions` 集合中只有 1 个版本 | `test_cannot_save_twice_or_library_question`、`test_permissions_and_not_found` |
-| 2E5 | 并发 | 存入过程中问卷被修改；同一道题同时存两次；存入过程中题目被删除 | — | 409 `EDIT_CONFLICT` 并撤销 v1；只成功一次、只留一个版本；404 并撤销 v1 | 如期望；第一种情况下另一个请求的修改保留 | `test_concurrent_edit_undoes_new_version`、`test_concurrent_double_save_leaves_one_version`、`test_phase2_edge_cases.py::test_save_to_library_question_deleted_meanwhile` |
+| 2E2 | 已发布、已关闭、第一阶段格式的问卷 | 分别存入：有答卷的已发布问卷、已关闭问卷、直接以第一阶段格式写入的问卷 | 水果问卷（`all`）中 bob 已提交“不喜欢 / 无”，存入第 1、4 题；已关闭的水果问卷存入第 1 题；直接写入的 `{"id": "q_old001", "type": "number", "title": "旧问卷的题", "validation": {"required": true, "min": 0, "max": 10, "integerOnly": true}}`（问卷状态 closed） | 都可以；状态、内容、统计不变；之后仍可填写 | 状态分别仍为 published、closed；统计与存入前完全相同；存入后再提交 201；第一阶段格式的题去掉 `source` 后与原来相同 | `test_save_from_published_survey_keeps_responses`、`test_save_from_closed_survey`、`test_save_phase1_survey_written_directly` |
+| 2E3 | 存入后的行为 | 在草稿中改题目；直接修改 v1；派生；同一份问卷再加；另一份问卷使用 | 草稿水果问卷：存入第 4 题后改 `title: "改标题"`、改 `required: false`；存入第 1 题得到 v1，PUT 和 POST `/versions` 都提交 `{"title": "改", "options": v1 的选项}`；同一问卷再加 v1；新问卷“年度调查”加入 v1 | 只能改必答；v1 不能直接改；可派生；同一问卷 409；别的问卷可用且选项 id 相同 | 改题目 422；直接修改 409；派生得到 v2；再加 409；另一份问卷 201，选项与原题相同 | `test_saved_question_is_restricted_in_draft`、`test_saved_version_can_be_reused_and_derived` |
+| 2E4 | 拒绝的情况 | 存两次；存来自已保存题目的题；别人的问卷；不存在的题或问卷；未登录 | 草稿水果问卷第 1 题存两次；另一份问卷中从 v1 加进来的题；bob 存 alice 的问卷；题目 id `q_nothere`；随机问卷 id；不带令牌 | 409 `ALREADY_IN_LIBRARY`；404；401；不产生多余的版本 | 如期望；`questions` 集合中只有 1 个版本 | `test_cannot_save_twice_or_library_question`、`test_permissions_and_not_found` |
+| 2E5 | 并发 | 存入过程中问卷被修改；同一道题同时存两次；存入过程中题目被删除 | 草稿水果问卷第 1 题：存入过程中另一个请求把第 5 题改为“另一个请求改的”；存入过程中再调用一次存入；问卷中文本题“备注”，存入过程中问卷题目被清空 | 409 `EDIT_CONFLICT` 并撤销 v1；只成功一次、只留一个版本；404 并撤销 v1 | 如期望；第一种情况下另一个请求的修改保留 | `test_concurrent_edit_undoes_new_version`、`test_concurrent_double_save_leaves_one_version`、`test_phase2_edge_cases.py::test_save_to_library_question_deleted_meanwhile` |
 
 ### 2F. 题库
 
 | 编号 | 测试点 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 自动测试 |
 |---|---|---|---|---|---|---|
 | 2F1 | 创建、修改 | POST `/api/banks`；PATCH | `{"name": "  常用题  ", "description": "每学期都用"}`；改说明；空名称、101 字名称、1001 字说明、多余字段；空 PATCH | 名称去空格；修改成功；不合法 422；空 PATCH 原样返回 | 名称“常用题”、`items` 空、不共享；修改后 `updatedAt` 变大；不合法的都是 422；空 PATCH 的 `updatedAt` 不变 | `test_banks.py::test_create_and_update_bank`、`test_bank_input_validation`、`test_phase2_edge_cases.py::test_update_bank_validation_and_no_change` |
-| 2F2 | 加入、同一道题一项、不加锁 | 加入年龄、性别；再加年龄的 v1、v2 | — | 加入成功、不加锁；同一道题 409 | 两项的 `available` 都为 true；年龄 `locked` false；再加两次都是 409 `ALREADY_IN_BANK` | `test_add_items`、`test_one_item_per_question` |
-| 2F3 | 换版本、移除 | 把年龄换成 v2；换成另一道题；换不存在的项；移除 | — | 换成功（不自动跟随新版本）；422；404 `ITEM_NOT_FOUND`；移除后版本可以删除 | v3 出现后仍是 v1；换后为 v2；另一道题 422；不存在的项 404；移除后删除版本 204 | `test_switch_item_version`、`test_remove_item` |
-| 2F4 | 删除不影响问卷和别人的题库 | 版本在 bob 的题库中时 alice 删除它；删除题库 | — | 版本不能删 409；删除题库后问卷和版本都在 | 409 `QUESTION_IN_BANK`；删除题库 204，问卷题目不变，版本仍可查看 | `test_version_in_bank_cannot_be_deleted`、`test_delete_bank_does_not_affect_surveys_or_versions` |
-| 2F5 | 能加入哪些版本 | 加 carol 的私有题；加 carol 共享给 alice 的题；bob 加只通过 alice 题库看到的题 | — | 404；201；403 `NOT_DIRECTLY_ACCESSIBLE` | 如期望 | `test_which_versions_can_be_added` |
+| 2F2 | 加入、同一道题一项、不加锁 | 加入年龄、性别；再加年龄的 v1、v2 | alice 的年龄 v1、性别 v1 加入题库“学生基本信息”；年龄派生 v2 后再加入 v1、v2 | 加入成功、不加锁；同一道题 409 | 两项的 `available` 都为 true；年龄 `locked` false；再加两次都是 409 `ALREADY_IN_BANK` | `test_add_items`、`test_one_item_per_question` |
+| 2F3 | 换版本、移除 | 把年龄换成 v2；换成另一道题；换不存在的项；移除 | 年龄 v1、v2（“新问法”）、v3 和性别 v1；PUT `/items/{年龄 rootId}` 分别提交 `{"questionId": v2}`、`{"questionId": 性别 v1}`；PUT `/items/{性别 rootId}`；DELETE `/items/{年龄 rootId}` 两次、`/items/not-an-id` | 换成功（不自动跟随新版本）；422；404 `ITEM_NOT_FOUND`；移除后版本可以删除 | v3 出现后仍是 v1；换后为 v2；另一道题 422；不存在的项 404；移除后删除版本 204 | `test_switch_item_version`、`test_remove_item` |
+| 2F4 | 删除不影响问卷和别人的题库 | 版本在 bob 的题库中时 alice 删除它；删除题库 | alice 把年龄 v1 共享给 bob，bob 加入自己的题库后 alice DELETE v1；另一个题库含年龄 v1 且问卷已使用它，DELETE 该题库 | 版本不能删 409；删除题库后问卷和版本都在 | 409 `QUESTION_IN_BANK`；删除题库 204，问卷题目不变，版本仍可查看 | `test_version_in_bank_cannot_be_deleted`、`test_delete_bank_does_not_affect_surveys_or_versions` |
+| 2F5 | 能加入哪些版本 | 加 carol 的私有题；加 carol 共享给 alice 的题；bob 加只通过 alice 题库看到的题 | carol 的私有年龄题、共享给 alice 的性别题，alice 分别加入；alice 把题库共享给 bob 后，bob 把性别题加入自己的题库 | 404；201；403 `NOT_DIRECTLY_ACCESSIBLE` | 如期望 | `test_which_versions_can_be_added` |
 | 2F6 | 只有创建者能修改 | bob（被共享）、carol（看不到）各做 6 种修改 | 改名、删除、共享、加入、换版本、移除 | bob 403 `NOT_OWNER`，carol 404；题库不变 | 12 次都如期望；题库名称和条目不变 | `test_only_owner_modifies_bank` |
 | 2F7 | 通过共享的题库使用（需求七） | alice 把题库共享给 bob，bob 查看题库、选进问卷、派生、修改 | 未单独共享的年龄 v1 | bob 可以查看、选用、派生，不能修改 | 共享前 bob 看不到；之后条目可用、`sharing` 为 null；选进问卷 201；派生 201；修改 403；历史中两个版本都可访问 | `test_shared_bank_grants_use_and_derive` |
-| 2F8 | 访问权只限题库中的版本 | 题库中是 v1；把条目换成 v2；取消共享题库 | — | bob 只能看到 v1；换后只能看到 v2；取消后都看不到 | 如期望；bob 看到的历史为 [可访问, 不可访问] | `test_only_items_of_the_bank_are_granted`、`test_public_bank` |
-| 2F9 | 实时判断可用性 | carol 的题共享给 alice → 加入 alice 的公开题库 → bob 选进问卷 → carol 取消共享 → 重新共享 | — | 取消后对所有人不可用、条目保留、bob 的问卷不变；重新共享后恢复 | 取消后 alice、bob 看到的 `available` 都为 false、`question` 为 null，访问版本都是 404；`itemCount` 仍为 1；bob 问卷题目不变；重新共享后可用 | `test_item_unavailable_after_original_owner_unshares` |
-| 2F10 | 给创建者的提示 | 题库中是 v1，派生 v2、v3；换成 v3；bob 查看；题库中已是较新版本；别人未共享的版本 | — | 提示最新的可换版本；换后消失；别人看不到；当前已是较新版本时不提示；不提示看不到的版本 | “有新版本 v3 可换”；换后为 null；bob 看到的 `newerVersion` 与 `notice` 都为 null；题库中是 v2 时不提示 v1；bob 未共享的版本不提示，共享后提示 | `test_hint_newer_version`、`test_hint_ignores_older_versions`、`test_hint_only_versions_owner_can_use` |
-| 2F11 | 不可用的原因 | carol 取消共享；alice 有自己派生的版本时；版本不存在时 | — | 说明原因和处理办法，能换时建议换成哪个版本 | “原作者 carol 已取消共享（或不再公开）这道题，你已不能使用这个版本；请移除这一项”；有自己的版本时结尾为“请移除这一项，或换成 v2”；版本不存在时为“这个版本已不存在；请移除这一项” | `test_unavailable_notice_suggests_replacement`、`test_phase2_edge_cases.py::test_bank_item_whose_version_no_longer_exists` |
-| 2F12 | 并发 | 加入、换版本时版本恰好被删除；加入时题库被删除 | — | 撤销这次修改并 404；404 `BANK_NOT_FOUND` | 加入后题库 `items` 为空；换版本后恢复为原来的版本；题库被删除时 404 `BANK_NOT_FOUND` | `test_add_item_undone_if_version_deleted_concurrently`、`test_switch_item_undone_if_version_deleted_concurrently`、`test_phase2_edge_cases.py::test_add_item_when_bank_deleted_meanwhile` |
+| 2F8 | 访问权只限题库中的版本 | 题库中是 v1；把条目换成 v2；取消共享题库 | 年龄 v1、v2，题库只含 v1 并共享给 bob；把条目换成 v2；另一个题库设为公开再取消公开 | bob 只能看到 v1；换后只能看到 v2；取消后都看不到 | 如期望；bob 看到的历史为 [可访问, 不可访问] | `test_only_items_of_the_bank_are_granted`、`test_public_bank` |
+| 2F9 | 实时判断可用性 | carol 的题共享给 alice → 加入 alice 的公开题库 → bob 选进问卷 → carol 取消共享 → 重新共享 | carol 的年龄 v1 共享给 alice，加入 alice 的题库并设 `{"public": true}`；bob 选进问卷；carol 改为 `{"usernames": []}`；再改回 `["alice"]` | 取消后对所有人不可用、条目保留、bob 的问卷不变；重新共享后恢复 | 取消后 alice、bob 看到的 `available` 都为 false、`question` 为 null，访问版本都是 404；`itemCount` 仍为 1；bob 问卷题目不变；重新共享后可用 | `test_item_unavailable_after_original_owner_unshares` |
+| 2F10 | 给创建者的提示 | 题库中是 v1，派生 v2、v3；换成 v3；bob 查看；题库中已是较新版本；别人未共享的版本 | 题库中为年龄 v1，派生 v2、v3 后换成 v3；共享给 bob 并换回 v1；另一个题库中为 v2（另有 v1）；bob 派生“bob 的版本”后共享给 alice | 提示最新的可换版本；换后消失；别人看不到；当前已是较新版本时不提示；不提示看不到的版本 | “有新版本 v3 可换”；换后为 null；bob 看到的 `newerVersion` 与 `notice` 都为 null；题库中是 v2 时不提示 v1；bob 未共享的版本不提示，共享后提示 | `test_hint_newer_version`、`test_hint_ignores_older_versions`、`test_hint_only_versions_owner_can_use` |
+| 2F11 | 不可用的原因 | carol 取消共享；alice 有自己派生的版本时；版本不存在时 | carol 的年龄 v1 共享给 alice 并加入题库，carol 改为 `{"usernames": []}`；alice 派生“alice 的版本”（v2）后换成 v2；性别 v1 加入题库后从数据库中删除 | 说明原因和处理办法，能换时建议换成哪个版本 | “原作者 carol 已取消共享（或不再公开）这道题，你已不能使用这个版本；请移除这一项”；有自己的版本时结尾为“请移除这一项，或换成 v2”；版本不存在时为“这个版本已不存在；请移除这一项” | `test_unavailable_notice_suggests_replacement`、`test_phase2_edge_cases.py::test_bank_item_whose_version_no_longer_exists` |
+| 2F12 | 并发 | 加入、换版本时版本恰好被删除；加入时题库被删除 | 年龄 v1 加入题库时 v1 被删除；条目从 v1 换成 v2 时 v2 被删除；加入时题库先被删除 | 撤销这次修改并 404；404 `BANK_NOT_FOUND` | 加入后题库 `items` 为空；换版本后恢复为原来的版本；题库被删除时 404 `BANK_NOT_FOUND` | `test_add_item_undone_if_version_deleted_concurrently`、`test_switch_item_undone_if_version_deleted_concurrently`、`test_phase2_edge_cases.py::test_add_item_when_bank_deleted_meanwhile` |
 
 ### 2G. 被哪些问卷使用（需求六）
 
@@ -524,8 +524,8 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 2G1 | 自己的问卷显示详情 | 版本用在“去年的调查”中并发布 | GET `/api/questions/{id}/usage` | 标题、状态、链接、问卷中的题目 id、版本 | `{id, title: "去年的调查", status: "published", isExpired: false, shortCode, url, surveyQuestionId, questionId, version: 1}`，`mineCount` 1、`othersCount` 0 | `test_question_usage.py::test_my_surveys_show_title_status_link` |
 | 2G2 | 按版本 / 按整道题 | A 用 v1、B 用 v2 | `scope=version`、`scope=question` | 按版本各只有一份；按整道题两份；从任一版本查结果相同 | v1 → [A]，v2 → [B]；整道题 {(A, 1), (B, 2)}；`scope=everything` 422 | `test_version_scope_vs_question_scope` |
 | 2G3 | 别人的问卷只显示数量 | alice 用 1 份、bob 用 2 份 | alice 查询；bob 查询 | 自己的显示详情，别人的只计数 | alice：自己 1 份、别人 2 份；bob：自己 2 份、别人 1 份，返回中找不到“alice 的问卷” | `test_others_surveys_only_counted`、`test_question_scope_includes_others_versions` |
-| 2G4 | 计入哪些问卷 | 草稿、已发布、已关闭、删掉了这道题的问卷；没有 `source` 的问卷；已截止的问卷 | — | 前三者计入，删掉题的不计入（版本仍锁定）；`isExpired` 正确 | 计入 {草稿, 已发布, 已关闭}；版本 `locked` true；已截止的 `isExpired` true | `test_all_statuses_and_removed_questions`、`test_expired_flag` |
-| 2G5 | 权限 | 无权访问；通过共享题库访问 | — | 404；可以查 | 如期望 | `test_permissions` |
+| 2G4 | 计入哪些问卷 | 草稿、已发布、已关闭、删掉了这道题的问卷；没有 `source` 的问卷；已截止的问卷 | 性别 v1 加入“草稿”“已发布”“已关闭”“删掉了”四份问卷，“删掉了”中删除这道题；另建一份水果问卷（无 source）；另一份问卷发布后截止时间设为 1 天前 | 前三者计入，删掉题的不计入（版本仍锁定）；`isExpired` 正确 | 计入 {草稿, 已发布, 已关闭}；版本 `locked` true；已截止的 `isExpired` true | `test_all_statuses_and_removed_questions`、`test_expired_flag` |
+| 2G5 | 权限 | 无权访问；通过共享题库访问 | bob 查询 alice 未共享的年龄 v1；`not-an-id`；不带令牌；alice 把 v1 放进题库并共享给 bob 后 bob 查询 | 404；可以查 | 如期望 | `test_permissions` |
 
 ### 2H. 单题跨问卷统计（需求八）
 
@@ -534,28 +534,28 @@ python -m scripts.sport_survey_e2e --skip-stats       # 不核对统计
 | 编号 | 测试点 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 自动测试 |
 |---|---|---|---|---|---|---|
 | 2H1 | 合并不同版本 | GET `/api/questions/{v1}/stats` | 上述数据 | 2 份问卷、5 份答卷、作答人数 2（跨问卷去重）；按选项 id 合并，文字取最新版本 | `overall` 为 (2, 5, 2)；选项 [(男, 1), (女性, 3), (其他, 1)]；S1 (v1, 2, 2)，选项 {男 1, 女 1}；S2 (v2, 3, 2)，选项 {男 0, 女性 2, 其他 1} | `test_cross_stats.py::test_merge_versions_by_option_id` |
-| 2H2 | 与第一阶段单题统计一致 | 每份问卷的数据与 `/api/surveys/{id}/stats/questions/{qid}` 比较 | — | 答卷数、作答人数、各选项完全相同 | 两份问卷都完全相同 | `test_per_survey_numbers_match_single_survey_stats` |
-| 2H3 | 按版本筛选 | `versionId=v1`；`versionId=v1&versionId=v2`；另一道题的版本、格式错误、不存在的 id | — | 只统计 v1 的问卷；两个都选等于全部；不合法 422 | 只有 S1、答卷 2、文字为 v1 的“女”；两个都选为 5；3 种不合法都是 422 | `test_filter_by_version`、`test_version_filter_validation` |
-| 2H4 | 按问卷筛选 | `surveyId=S1`；S1 和 S2；草稿、没用这道题的、别人的、格式错误、不存在的问卷 | — | 只统计指定问卷；不合法 422（指出第几个参数） | 只有 S1、答卷 2、作答人数 2；两个都选为 5；5 种不合法都是 422，字段为 `surveyId[1]` | `test_filter_by_survey`、`test_survey_filter_validation` |
-| 2H5 | 两种筛选取交集 | S1 + v2 | — | 没有问卷 | `surveys` 为空，问卷数 0、答卷数 0 | `test_survey_filter_combined_with_version_filter` |
-| 2H6 | 各问卷按自己的提交策略 | latest 问卷中 bob 先选男、再选女 | — | 只算最后一次 | 答卷 1、作答人数 1，{男 0, 女 1} | `test_latest_policy` |
-| 2H7 | 只统计自己的已发布、已关闭问卷 | alice 已发布、已关闭、草稿各一份；bob 的问卷 | — | 只有 alice 的已发布、已关闭；bob 查询只有自己的 | alice：{已发布, 已关闭}，答卷 2；bob：[bob 的问卷]，答卷 1 | `test_only_my_published_or_closed_surveys` |
-| 2H8 | 数字题 | 去年 10、20，今年 60 | — | 平均值按全部答案 (10+20+60)/3 = 30；各问卷平均；内容附问卷标题、分页 | 总体 30；去年 15、今年 60；题目取最新版本“你的年龄（周岁）”；内容 [(今年, 60), (去年, 20), (去年, 10)]；`offset=1&limit=1` 为 [20]；`limit=201` 422 | `test_number_average_and_items` |
-| 2H9 | 文本、多选 | 两份问卷的文本题；多选题 | — | 文本附问卷标题；多选按答卷计数 | 文本 [(B, 少作业), (A, 多开课)]、作答人数 1；多选 {读书 1, 运动 2, 音乐 1}、答卷 2 | `test_text_items`、`test_multiple_choice` |
-| 2H10 | 只在旧版本中的选项 | v1 男/女/保密 → v2“保密”改为“不想说” → v3 删掉它；三份问卷各自填写 | — | 照常计数、总数正确；文字取含有它的最新版本；标注只在旧版本中；只统计 v1、v2 时不标注 | [男 1, 女 1, 不想说 2（`onlyInOldVersions` true）]，答卷 4 = 各选项之和；每份问卷用自己的选项；只选 v1、v2 时三项都为 false；多选题同样标注“游戏” | `test_option_deleted_in_newer_version_still_counted`、`test_multiple_choice_option_deleted_in_newer_version` |
-| 2H11 | 不显示填写人 | 实名问卷的跨问卷统计；4 种题型的管道 | — | 返回中没有用户名；管道没有 `$lookup`、不输出 `respondentId`；每份问卷用自己的口径 | 返回中找不到 bob、carol 和 respondent（`respondentCount` 除外）；4 种管道都没有 `$lookup`，前三步与设计一致 | `test_no_respondent_info`、`test_pipeline_has_no_lookup_or_respondent_output` |
-| 2H12 | 索引、空结果、截止 | `explain` 第一步；没有问卷使用；已截止的问卷 | — | 使用索引；0 和空列表；`isExpired` 正确 | 执行计划含 `IXSCAN`；`surveys` 为空、`overall` 全为 0；{已截止的问卷: true, 收集中的问卷: false} | `test_first_stage_uses_index`、`test_permissions_and_empty`、`test_survey_entries_report_expired` |
-| 2H13 | 第一阶段的答卷计入 | 第一阶段式问卷收集答卷后，把题存入“我的题目”，再用在新问卷中 | — | 旧答卷计入合并结果 | {喜欢 1, 不喜欢 1}，问卷 2、答卷 2、作答人数 1 | `test_phase1_answers_counted_after_saving_to_library` |
+| 2H2 | 与第一阶段单题统计一致 | 每份问卷的数据与 `/api/surveys/{id}/stats/questions/{qid}` 比较 | 上述数据；GET `/api/questions/{v2}/stats`，与 GET `/api/surveys/{S1、S2}/stats/questions/{qid}` 逐项比较 | 答卷数、作答人数、各选项完全相同 | 两份问卷都完全相同 | `test_per_survey_numbers_match_single_survey_stats` |
+| 2H3 | 按版本筛选 | `versionId=v1`；`versionId=v1&versionId=v2`；另一道题的版本、格式错误、不存在的 id | `versionId=v1`；`versionId=v1&versionId=v2`；`versionId` 为另一道题（年龄）的版本、`bad`、随机 ObjectId | 只统计 v1 的问卷；两个都选等于全部；不合法 422 | 只有 S1、答卷 2、文字为 v1 的“女”；两个都选为 5；3 种不合法都是 422 | `test_filter_by_version`、`test_version_filter_validation` |
+| 2H4 | 按问卷筛选 | `surveyId=S1`；S1 和 S2；草稿、没用这道题的、别人的、格式错误、不存在的问卷 | `surveyId=S1`；`surveyId=S1&surveyId=S2`；`surveyId=S1` 加上草稿 / 水果问卷 / bob 的问卷 / `not-an-id` / 随机 ObjectId | 只统计指定问卷；不合法 422（指出第几个参数） | 只有 S1、答卷 2、作答人数 2；两个都选为 5；5 种不合法都是 422，字段为 `surveyId[1]` | `test_filter_by_survey`、`test_survey_filter_validation` |
+| 2H5 | 两种筛选取交集 | S1 + v2 | `surveyId=S1&versionId=v2` | 没有问卷 | `surveys` 为空，问卷数 0、答卷数 0 | `test_survey_filter_combined_with_version_filter` |
+| 2H6 | 各问卷按自己的提交策略 | latest 问卷中 bob 先选男、再选女 | 性别 v1 用在 latest 问卷“可以重填”；bob 先提交“男”，再提交“女” | 只算最后一次 | 答卷 1、作答人数 1，{男 0, 女 1} | `test_latest_policy` |
+| 2H7 | 只统计自己的已发布、已关闭问卷 | alice 已发布、已关闭、草稿各一份；bob 的问卷 | “alice 已发布”“alice 已关闭”各由 carol 填“男”；“alice 草稿”；bob（被共享）的“bob 的问卷”由 carol 填“男” | 只有 alice 的已发布、已关闭；bob 查询只有自己的 | alice：{已发布, 已关闭}，答卷 2；bob：[bob 的问卷]，答卷 1 | `test_only_my_published_or_closed_surveys` |
+| 2H8 | 数字题 | 去年 10、20，今年 60 | 年龄 v1 用于“去年”、v2（“你的年龄（周岁）”）用于“今年”；去年 bob 10、carol 20，今年 bob 60；`offset=1&limit=1`；`limit=201` | 平均值按全部答案 (10+20+60)/3 = 30；各问卷平均；内容附问卷标题、分页 | 总体 30；去年 15、今年 60；题目取最新版本“你的年龄（周岁）”；内容 [(今年, 60), (去年, 20), (去年, 10)]；`offset=1&limit=1` 为 [20]；`limit=201` 422 | `test_number_average_and_items` |
+| 2H9 | 文本、多选 | 两份问卷的文本题；多选题 | 文本题“建议”（最多 100 字）用于 A、B，bob 分别填“多开课”“少作业”；多选“爱好”（读书、运动、音乐）用于 A、B，bob 选 [读书, 运动]，carol 选 [运动, 音乐] | 文本附问卷标题；多选按答卷计数 | 文本 [(B, 少作业), (A, 多开课)]、作答人数 1；多选 {读书 1, 运动 2, 音乐 1}、答卷 2 | `test_text_items`、`test_multiple_choice` |
+| 2H10 | 只在旧版本中的选项 | v1 男/女/保密 → v2“保密”改为“不想说” → v3 删掉它；三份问卷各自填写 | 性别 v1（男、女、保密）→ v2（“保密”改为“不想说”）→ v3（删除该选项）；v1 的问卷 bob 选保密、carol 选男，v2 的问卷 bob 选不想说，v3 的问卷 bob 选女；`versionId=v1&versionId=v2`；多选“爱好”v1（读书、游戏）→ v2（删除游戏、新增运动），bob 分别选 [读书, 游戏]、[读书, 运动] | 照常计数、总数正确；文字取含有它的最新版本；标注只在旧版本中；只统计 v1、v2 时不标注 | [男 1, 女 1, 不想说 2（`onlyInOldVersions` true）]，答卷 4 = 各选项之和；每份问卷用自己的选项；只选 v1、v2 时三项都为 false；多选题同样标注“游戏” | `test_option_deleted_in_newer_version_still_counted`、`test_multiple_choice_option_deleted_in_newer_version` |
+| 2H11 | 不显示填写人 | 实名问卷的跨问卷统计；4 种题型的管道 | 上述数据（S1、S2 为实名问卷）；管道目标为两份问卷的 `q_aaaaaa`（口径 `{}`）、`q_bbbbbb`（口径 `{isLatest: true}`），4 种题型 | 返回中没有用户名；管道没有 `$lookup`、不输出 `respondentId`；每份问卷用自己的口径 | 返回中找不到 bob、carol 和 respondent（`respondentCount` 除外）；4 种管道都没有 `$lookup`，前三步与设计一致 | `test_no_respondent_info`、`test_pipeline_has_no_lookup_or_respondent_output` |
+| 2H12 | 索引、空结果、截止 | `explain` 第一步；没有问卷使用；已截止的问卷 | 上述 S1、S2 的管道（`explain`）；alice 新建、未用于问卷的年龄 v1；性别 v1 用于两份问卷，其中“已截止的问卷”截止时间设为 1 天前 | 使用索引；0 和空列表；`isExpired` 正确 | 执行计划含 `IXSCAN`；`surveys` 为空、`overall` 全为 0；{已截止的问卷: true, 收集中的问卷: false} | `test_first_stage_uses_index`、`test_permissions_and_empty`、`test_survey_entries_report_expired` |
+| 2H13 | 第一阶段的答卷计入 | 第一阶段式问卷收集答卷后，把题存入“我的题目”，再用在新问卷中 | 已发布的水果问卷中 bob 提交“不喜欢 / 无”；把第 1 题存入我的题目得到 v1，用在“新问卷”中，bob 选“喜欢” | 旧答卷计入合并结果 | {喜欢 1, 不喜欢 1}，问卷 2、答卷 2、作答人数 1 | `test_phase1_answers_counted_after_saving_to_library` |
 
 ### 2I. 示例数据
 
 | 编号 | 测试点 | 测试步骤 | 输入 | 期望输出 | 实际结果 | 自动测试 |
 |---|---|---|---|---|---|---|
-| 2I1 | 版本与恢复 | 运行 `seed_phase2.seed()`，查看“总体满意度” | — | v1–v4 属于老师，v4 恢复自 v2、接在 v3 后；v5 属于同事、不共享；用过的版本锁定 | 版本号 [1, 2, 3, 4, 5]；v4 `parentId` = v3、`restoredFrom` = v2、选项文字与 v2 相同；v5 属于 demo_colleague；锁定状态 [是, 是, 否, 是, 是] | `test_seed_phase2.py::test_versions_including_restore` |
-| 2I2 | 三份问卷 | 查看老师的问卷 | — | 三种提交策略；各 6 份答卷；“建议”是存入的；跳转保留 | {Db25Fa: once, Db26Sp: latest, Db26Fa: all}，均已发布、各 6 份；Db25Fa 的“建议”`source.version` 1；Db26Fa 第 1 题跳到“建议” | `test_surveys_policies_and_responses` |
-| 2I3 | 跨问卷统计数字（手工计算） | 老师查看满意度、学习时间 | — | 问卷 3、答卷 17、作答人数 12；各选项次数；学习时间平均 3.75 | 非常满意 4、满意 7、说不上好坏 2、不满意 2、很不满意 2（只在旧版本中）；同事的问卷不计入；学习时间 16 份、平均 3.75 | `test_cross_survey_stats_numbers` |
-| 2I4 | 共享、题库、使用情况 | 查看题库条目和提示、使用情况 | — | 有新版本提示、不可用原因；同事看不到原因；别人的问卷只计数 | 提示“有新版本 v4 可换”“有新版本 v2 可换”和“原作者 demo_colleague 已取消共享…”；同事看到的提示全为 null；满意度：自己 3 份、别人 1 份；学习时间：自己 3 份、别人 1 份（同事通过题库使用） | `test_sharing_bank_and_usage` |
-| 2I5 | 幂等、重新生成、与第一阶段共存 | 运行两次；`reset=True`；与第一阶段示例数据一起生成 | — | 不重复；重新生成；互不影响 | 第二次 `created` false；重新生成后为新的 id，4 份问卷；Food26 仍有 13 份答卷、题目没有 `source` | `test_idempotent_and_reset`、`test_phase1_demo_unaffected` |
+| 2I1 | 版本与恢复 | 运行 `seed_phase2.seed()`，查看“总体满意度” | `seed_phase2.seed(db)`（测试库）；查看“你对这门课的总体满意度”这道题的所有版本 | v1–v4 属于老师，v4 恢复自 v2、接在 v3 后；v5 属于同事、不共享；用过的版本锁定 | 版本号 [1, 2, 3, 4, 5]；v4 `parentId` = v3、`restoredFrom` = v2、选项文字与 v2 相同；v5 属于 demo_colleague；锁定状态 [是, 是, 否, 是, 是] | `test_seed_phase2.py::test_versions_including_restore` |
+| 2I2 | 三份问卷 | 查看老师的问卷 | `seed_phase2.seed(db)`；查看 demo_teacher 的问卷 `Db25Fa`、`Db26Sp`、`Db26Fa` | 三种提交策略；各 6 份答卷；“建议”是存入的；跳转保留 | {Db25Fa: once, Db26Sp: latest, Db26Fa: all}，均已发布、各 6 份；Db25Fa 的“建议”`source.version` 1；Db26Fa 第 1 题跳到“建议” | `test_surveys_policies_and_responses` |
+| 2I3 | 跨问卷统计数字（手工计算） | 老师查看满意度、学习时间 | `seed_phase2.seed(db)`；demo_teacher 查询满意度 v1、学习时间 v1 的跨问卷统计 | 问卷 3、答卷 17、作答人数 12；各选项次数；学习时间平均 3.75 | 非常满意 4、满意 7、说不上好坏 2、不满意 2、很不满意 2（只在旧版本中）；同事的问卷不计入；学习时间 16 份、平均 3.75 | `test_cross_survey_stats_numbers` |
+| 2I4 | 共享、题库、使用情况 | 查看题库条目和提示、使用情况 | `seed_phase2.seed(db)`；demo_teacher、demo_colleague 分别查看题库“课程评价常用题”；demo_teacher 查询满意度（`scope=question`）和学习时间（`scope=version`）的使用情况 | 有新版本提示、不可用原因；同事看不到原因；别人的问卷只计数 | 提示“有新版本 v4 可换”“有新版本 v2 可换”和“原作者 demo_colleague 已取消共享…”；同事看到的提示全为 null；满意度：自己 3 份、别人 1 份；学习时间：自己 3 份、别人 1 份（同事通过题库使用） | `test_sharing_bank_and_usage` |
+| 2I5 | 幂等、重新生成、与第一阶段共存 | 运行两次；`reset=True`；与第一阶段示例数据一起生成 | 连续调用 `seed_phase2.seed(db)` 两次；`seed(db, reset=True)`；先 `seed_demo.seed(db)` 再 `seed_phase2.seed(db)` | 不重复；重新生成；互不影响 | 第二次 `created` false；重新生成后为新的 id，4 份问卷；Food26 仍有 13 份答卷、题目没有 `source` | `test_idempotent_and_reset`、`test_phase1_demo_unaffected` |
 
 ## 九、第二阶段界面测试（`tests/ui/`）
 
