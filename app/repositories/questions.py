@@ -35,10 +35,13 @@ def used_option_ids(db: Database, root_id: ObjectId) -> set[str]:
     return ids
 
 
-def latest_owned_in_root(db: Database, root_id: ObjectId, owner_id: ObjectId) -> dict | None:
+def latest_owned_in_root(db: Database, root_id: ObjectId, owner_id: ObjectId,
+                         exclude_id: ObjectId | None = None) -> dict | None:
     """自己在这道题下版本号最大的版本（恢复时默认的父版本、新版本继承共享设置）。"""
-    return db[QUESTIONS].find_one({"rootId": root_id, "ownerId": owner_id},
-                                  sort=[("version", DESCENDING)])
+    query = {"rootId": root_id, "ownerId": owner_id}
+    if exclude_id is not None:
+        query["_id"] = {"$ne": exclude_id}
+    return db[QUESTIONS].find_one(query, sort=[("version", DESCENDING)])
 
 
 def list_matching(db: Database, query: dict, offset: int, limit: int) -> tuple[list[dict], int]:
@@ -46,6 +49,19 @@ def list_matching(db: Database, query: dict, offset: int, limit: int) -> tuple[l
     total = db[QUESTIONS].count_documents(query)
     docs = list(db[QUESTIONS].find(query).sort([("updatedAt", -1), ("_id", -1)]).skip(offset).limit(limit))
     return docs, total
+
+
+def set_sharing_for_owner_in_root(db: Database, root_id: ObjectId, owner_id: ObjectId,
+                                  sharing: dict) -> int:
+    """以整道题为单位共享：一次更新 owner 在这道题下的所有版本（10.6），返回更新的版本数。
+    只改 sharing，不改 updatedAt（共享设置不是题目内容的修改，不影响编辑冲突检查）。"""
+    result = db[QUESTIONS].update_many({"rootId": root_id, "ownerId": owner_id},
+                                       {"$set": {"sharing": sharing}})
+    return result.matched_count
+
+
+def set_sharing(db: Database, question_id: ObjectId, sharing: dict) -> None:
+    db[QUESTIONS].update_one({"_id": question_id}, {"$set": {"sharing": sharing}})
 
 
 def update_unlocked(db: Database, question_id: ObjectId, owner_id: ObjectId,

@@ -5,6 +5,8 @@
 from datetime import datetime
 from typing import Any
 
+from pydantic import StrictBool
+
 from app.schemas.common import CamelModel
 from app.schemas.questions import OptionCreate, OptionUpdate, StrictCamelModel
 
@@ -30,9 +32,16 @@ class RestoreRequest(StrictCamelModel):
     parent_id: str | None = None  # 接在哪个版本后面；不填按默认规则
 
 
+class SharingUpdate(StrictCamelModel):
+    """整体替换共享设置：usernames 为共享给哪些用户（空数组 = 不共享给任何人），public 是否公开。"""
+    public: StrictBool
+    usernames: list[str]
+
+
 class SharingOut(CamelModel):
     public: bool
     user_ids: list[str]
+    usernames: list[str]
 
 
 class QuestionVersionOut(CamelModel):
@@ -51,6 +60,11 @@ class QuestionVersionOut(CamelModel):
     sharing: SharingOut | None = None  # 只对所有者返回
     created_at: datetime
     updated_at: datetime
+
+
+class SharingResult(CamelModel):
+    question: QuestionVersionOut
+    updated_versions: int  # 自己在这道题下被一起更新的版本数
 
 
 class QuestionVersionList(CamelModel):

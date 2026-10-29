@@ -19,6 +19,7 @@ from app.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from app.logic import question_access as access
 from app.logic.question_versions import build_content
 from app.repositories import questions as questions_repo
+from app.repositories import users as users_repo
 from app.utils import now_utc, parse_object_id, to_mongo_time
 
 VERSION_RETRIES = 5
@@ -117,6 +118,13 @@ def _insert_version(db: Database, owner_id: ObjectId, root_id: ObjectId, parent_
         if questions_repo.find(db, ref) is None:
             questions_repo.delete(db, doc["_id"])
             raise _not_found()
+
+    # 插入前读到的共享设置可能已被同时进行的“修改共享”改掉（它的 updateMany 没有包含这个新版本）：
+    # 插入后再与自己的其他版本对齐一次。修改共享若发生在插入之后，updateMany 本身就会包含新版本
+    other = questions_repo.latest_owned_in_root(db, root_id, owner_id, exclude_id=doc["_id"])
+    if other is not None and other["sharing"] != doc["sharing"]:
+        questions_repo.set_sharing(db, doc["_id"], other["sharing"])
+        doc["sharing"] = other["sharing"]
     return doc
 
 
@@ -189,6 +197,37 @@ def restore_version(db: Database, user_id: ObjectId, question_id: str, parent_id
     content = {k: source[k] for k in ("type", "title", "options", "validation") if k in source}
     return _insert_version(db, user_id, source["rootId"], parent["_id"], content,
                            restored_from=source["_id"])
+
+
+# ---------- 共享（10.6） ----------
+SHARE_USERS_MAX = 100
+
+
+def set_sharing(db: Database, user_id: ObjectId, question_id: str, *, public: bool,
+                usernames: list[str]) -> tuple[dict, int]:
+    """设置自己在这道题下所有版本的共享：指定用户（按用户名）和是否公开。整体替换原设置。
+
+    返回 (更新后的版本, 更新的版本数)。只有所有者能设置；不能共享给自己；用户名不存在时报错。
+    取消共享不影响已经复制进别人问卷的题（问卷里是副本）。
+    """
+    doc = _get_owned(db, user_id, question_id, "修改共享设置")
+    names = list(dict.fromkeys(n.strip() for n in usernames))  # 去掉首尾空格、去重、保持顺序
+    if len(names) > SHARE_USERS_MAX:
+        raise ValidationFailed([{"field": "usernames", "message": f"最多共享给 {SHARE_USERS_MAX} 个用户"}],
+                               "共享设置不合法")
+    found = users_repo.ids_by_usernames(db, names)
+    errors = []
+    for i, name in enumerate(names):
+        if name not in found:
+            errors.append({"field": f"usernames[{i}]", "message": f"用户「{name}」不存在"})
+        elif found[name] == user_id:
+            errors.append({"field": f"usernames[{i}]", "message": "不能共享给自己"})
+    if errors:
+        raise ValidationFailed(errors, "共享设置不合法")
+    sharing = {"public": public, "userIds": [found[n] for n in names]}
+    count = questions_repo.set_sharing_for_owner_in_root(db, doc["rootId"], user_id, sharing)
+    doc["sharing"] = sharing
+    return doc, count
 
 
 # ---------- 删除 ----------

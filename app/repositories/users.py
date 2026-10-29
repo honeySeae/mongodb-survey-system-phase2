@@ -21,6 +21,13 @@ def find_by_id(db: Database, user_id: ObjectId) -> dict | None:
     return db[USERS].find_one({"_id": user_id})
 
 
+def ids_by_usernames(db: Database, usernames: list[str]) -> dict[str, ObjectId]:
+    """批量按用户名取用户 id（命中 username_unique 索引）。"""
+    if not usernames:
+        return {}
+    return {u["username"]: u["_id"] for u in db[USERS].find({"username": {"$in": usernames}}, {"username": 1})}
+
+
 def usernames_by_ids(db: Database, user_ids) -> dict[ObjectId, str]:
     """批量取用户名（只取 username，不取密码哈希）。"""
     ids = list(set(user_ids))

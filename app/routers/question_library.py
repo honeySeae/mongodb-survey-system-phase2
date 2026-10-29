@@ -11,7 +11,7 @@ from app.logic import question_access as access
 from app.repositories import users as users_repo
 from app.schemas.question_library import (HistoryNode, QuestionHistory, QuestionVersionCreate,
                                           QuestionVersionEdit, QuestionVersionList, QuestionVersionOut,
-                                          RestoreRequest, SharingOut)
+                                          RestoreRequest, SharingOut, SharingResult, SharingUpdate)
 from app.security import get_current_user, get_database
 from app.services import question_library as service
 
@@ -24,21 +24,35 @@ def _str(oid) -> str | None:
     return str(oid) if oid is not None else None
 
 
+def _user_ids_to_name(docs: list[dict], user_id) -> list:
+    """需要显示用户名的用户：所有者，以及自己版本的共享名单（共享名单只返回给所有者）。"""
+    ids = [d["ownerId"] for d in docs]
+    for d in docs:
+        if access.is_owner(d, user_id):
+            ids.extend(d["sharing"]["userIds"])
+    return ids
+
+
+def _names(db: Database, docs: list[dict], user_id) -> dict:
+    return users_repo.usernames_by_ids(db, _user_ids_to_name(docs, user_id))
+
+
 def version_out(doc: dict, user_id, usernames: dict) -> QuestionVersionOut:
     mine = access.is_owner(doc, user_id)
+    shared_ids = doc["sharing"]["userIds"]
     return QuestionVersionOut(
         id=str(doc["_id"]), root_id=str(doc["rootId"]), parent_id=_str(doc.get("parentId")),
         restored_from=_str(doc.get("restoredFrom")), version=doc["version"],
         owner=usernames.get(doc["ownerId"], ""), is_mine=mine, locked=access.is_locked(doc),
         type=doc["type"], title=doc["title"], options=doc.get("options"), validation=doc["validation"],
-        sharing=SharingOut(public=doc["sharing"]["public"],
-                           user_ids=[str(u) for u in doc["sharing"]["userIds"]]) if mine else None,
+        sharing=SharingOut(public=doc["sharing"]["public"], user_ids=[str(u) for u in shared_ids],
+                           usernames=[usernames.get(u, "") for u in shared_ids]) if mine else None,
         created_at=doc["createdAt"], updated_at=doc["updatedAt"],
     )
 
 
 def _out(db: Database, doc: dict, user: dict) -> QuestionVersionOut:
-    return version_out(doc, user["_id"], users_repo.usernames_by_ids(db, [doc["ownerId"]]))
+    return version_out(doc, user["_id"], _names(db, [doc], user["_id"]))
 
 
 def _options(body) -> list[dict] | None:
@@ -62,7 +76,7 @@ def list_versions(scope: str = Query("mine", pattern="^(mine|shared|public|all)$
                   user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
     """题目版本列表（最近修改的在前）。"""
     docs, total = service.list_questions(db, user["_id"], scope, root_id, offset, limit)
-    names = users_repo.usernames_by_ids(db, [d["ownerId"] for d in docs])
+    names = _names(db, docs, user["_id"])
     return QuestionVersionList(items=[version_out(d, user["_id"], names) for d in docs],
                                total=total, offset=offset, limit=limit)
 
@@ -107,12 +121,21 @@ def restore(question_id: str, body: RestoreRequest | None = None, user: dict = D
     return _out(db, doc, user)
 
 
+@router.put("/{question_id}/sharing", response_model=SharingResult)
+def set_sharing(question_id: str, body: SharingUpdate, user: dict = Depends(get_current_user),
+                db: Database = Depends(get_database)):
+    """设置共享（只有所有者）：以整道题为单位，同时作用于自己在这道题下的所有版本；整体替换原设置。"""
+    doc, count = service.set_sharing(db, user["_id"], question_id,
+                                     public=body.public, usernames=body.usernames)
+    return SharingResult(question=_out(db, doc, user), updated_versions=count)
+
+
 @router.get("/{question_id}/history", response_model=QuestionHistory)
 def get_history(question_id: str, user: dict = Depends(get_current_user),
                 db: Database = Depends(get_database)):
     """这道题的全部版本（按版本号排序）；无权查看的版本只显示版本号和父子关系。"""
     doc, versions = service.history(db, user["_id"], question_id)
-    names = users_repo.usernames_by_ids(db, [v["ownerId"] for v, ok in versions if ok])
+    names = _names(db, [v for v, ok in versions if ok], user["_id"])
     nodes = [HistoryNode(id=str(v["_id"]), version=v["version"], parent_id=_str(v.get("parentId")),
                          restored_from=_str(v.get("restoredFrom")), accessible=ok,
                          detail=version_out(v, user["_id"], names) if ok else None)

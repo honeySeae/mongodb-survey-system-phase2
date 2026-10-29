@@ -48,7 +48,7 @@ def test_create_question_v1(client, alice, db):
     q = create(client, alice)
     assert q["version"] == 1 and q["rootId"] == q["id"] and q["parentId"] is None
     assert q["restoredFrom"] is None and q["owner"] == "alice" and q["isMine"] is True
-    assert q["locked"] is False and q["sharing"] == {"public": False, "userIds": []}
+    assert q["locked"] is False and q["sharing"] == {"public": False, "userIds": [], "usernames": []}
     stored = db[QUESTIONS].find_one({"_id": ObjectId(q["id"])})
     assert stored["rootId"] == stored["_id"] and "required" not in stored["validation"]
 
@@ -233,7 +233,7 @@ def test_shared_user_can_use_and_derive_but_not_modify(client, alice, bob, db):
     # bob 基于它创建自己的版本：属于 bob，默认不共享
     mine = ok(derive(client, bob, v1["id"], title="bob 的版本"), 201)
     assert mine["owner"] == "bob" and mine["version"] == 2 and mine["parentId"] == v1["id"]
-    assert mine["sharing"] == {"public": False, "userIds": []}
+    assert mine["sharing"] == {"public": False, "userIds": [], "usernames": []}
 
 
 def test_new_version_inherits_own_sharing(client, alice, bob, db):
@@ -267,7 +267,7 @@ def test_restore_others_version_defaults_parent_to_source(client, alice, bob, db
                               {"$set": {"sharing": {"public": True, "userIds": []}}})
     r = ok(client.post(f"/api/questions/{v1['id']}/restore", headers=bob), 201)
     assert r["owner"] == "bob" and r["parentId"] == v1["id"] and r["restoredFrom"] == v1["id"]
-    assert r["sharing"] == {"public": False, "userIds": []}
+    assert r["sharing"] == {"public": False, "userIds": [], "usernames": []}
     assert r["version"] == 3 and v2["version"] == 2
 
 
