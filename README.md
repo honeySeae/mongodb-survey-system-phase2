@@ -99,6 +99,8 @@ python -m scripts.seed_phase2      # 第二阶段示例数据：题目版本、�
 
 ## 三、部署
 
+本项目目前只在本地运行，没有部署到服务器。本节和 docs/DEPLOY.md 只是部署说明，其中的服务器步骤没有在服务器上实际验证过。
+
 部署到阿里云 Linux 服务器（Ubuntu 24.04、systemd）的完整步骤见 **[docs/DEPLOY.md](docs/DEPLOY.md#二部署到-linux-服务器阿里云)**。要点：
 
 - MongoDB 只监听本机（`bindIp: 127.0.0.1`），安全组**只开放 8000 端口，不开放 27017**；
@@ -141,7 +143,7 @@ static/         前端页面：登录、我的问卷、编辑、填写、统计�
 scripts/        init_db.py 初始化数据库；seed_demo.py 第一阶段示例问卷；seed_phase2.py 第二阶段示例数据；
                 verify_phase1_compat.py 兼容性验证；sport_survey_e2e.py 端到端测试；start_mongo.bat
 tests/          pytest 测试；tests/ui/ 界面测试；tests/js/ 前端纯函数测试
-docs/           设计文档、API 说明、部署、测试用例、兼容性验证、AI 使用日志（第一阶段）
+docs/           设计文档、API 说明、部署、测试用例、兼容性验证、AI 使用日志（第一、二阶段）
 ```
 
 关键逻辑（校验、跳转、统计管道）都是不访问数据库的纯函数，便于单独测试和第二阶段修改。
@@ -394,5 +396,6 @@ python -m scripts.seed_demo --owner-password XXX   # 指定创建者密码（部
 | [docs/COMPAT_VERIFICATION.md](docs/COMPAT_VERIFICATION.md) | 第一阶段 → 第二阶段兼容性验证的步骤与结果（27 项） |
 | [docs/sport_survey_e2e_result.md](docs/sport_survey_e2e_result.md) | 端到端测试（开发者手工创建的问卷）的完整核对结果 |
 | [docs/AI_LOG.md](docs/AI_LOG.md) | 第一阶段 AI 使用日志：每一步的提示词、AI 产出、是否修改、AI 的错误与开发者的决定 |
+| [docs/AI_LOG_PHASE2.md](docs/AI_LOG_PHASE2.md) | 第二阶段 AI 使用日志 |
 | [docs/KICKOFF_PROMPT.md](docs/KICKOFF_PROMPT.md) | 开工时给 AI 的提示词 |
 | [CLAUDE.md](CLAUDE.md) | 给 AI（Claude Code）的项目约束与工作方式 |
