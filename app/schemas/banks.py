@@ -37,14 +37,21 @@ class BankSummary(CamelModel):
     updated_at: datetime
 
 
+class NewerVersionOut(CamelModel):
+    question_id: str
+    version: int
+
+
 class BankItemOut(CamelModel):
     """题库中的一项。available=false 表示不可用（题库创建者已不能访问该版本，如原作者取消了共享），
-    此时不返回题目内容。"""
+    此时不返回题目内容。newer_version、notice 只对题库创建者返回：可以换成的版本和提示文字。"""
     question_id: str
     root_id: str
     added_at: datetime
     available: bool
     question: QuestionVersionOut | None = None
+    newer_version: NewerVersionOut | None = None
+    notice: str | None = None
 
 
 class BankOut(BankSummary):

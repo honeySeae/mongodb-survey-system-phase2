@@ -10,6 +10,8 @@
 并发：加入 / 换版本后再确认版本仍存在（与删除版本同时发生时撤销这一项并返回 404）；
 删除版本前会检查是否在任何题库中（第 3 步）。两者交错时总有一方失败。
 """
+from dataclasses import dataclass
+
 from bson import ObjectId
 from pymongo.database import Database
 
@@ -17,6 +19,7 @@ from app.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from app.logic import question_access as access
 from app.repositories import banks as banks_repo
 from app.repositories import questions as questions_repo
+from app.repositories import users as users_repo
 from app.services import question_library as library
 from app.utils import now_utc, parse_object_id
 
@@ -76,17 +79,59 @@ def list_banks(db: Database, user_id: ObjectId, scope: str, offset: int, limit: 
     return banks_repo.list_matching(db, query, offset, limit)
 
 
-def resolve_items(db: Database, bank: dict) -> list[tuple[dict, dict | None]]:
-    """题库条目及其版本：[(条目, 版本或 None)]。版本为 None 表示这一项不可用
-    （题库创建者已不能直接访问该版本，如原作者取消了共享）。"""
+@dataclass
+class ResolvedItem:
+    """题库中的一项及其状态。
+
+    version：可用时为该版本，不可用时为 None（题库创建者已不能直接访问该版本，如原作者取消了共享）。
+    以下两项只对题库创建者给出（只有创建者能换版本、移除），其他人为 None：
+    newer：可以换成的版本——这道题中创建者能直接访问、版本号比当前大的最新版本；
+           当前版本不可用时，为创建者能直接访问的最新版本（不论版本号大小）。
+    notice：给创建者的提示文字（有新版本可换；不可用的原因和处理办法）。
+    """
+    item: dict
+    version: dict | None
+    newer: dict | None = None
+    notice: str | None = None
+
+
+def resolve_items(db: Database, bank: dict, viewer_id: ObjectId) -> list[ResolvedItem]:
+    owner_id = bank["ownerId"]
     ids = [item["questionId"] for item in bank["items"]]
     docs = {d["_id"]: d for d in questions_repo.find_many(db, ids)}
+    is_owner = viewer_id == owner_id
+    by_root: dict[ObjectId, list[dict]] = {}
+    if is_owner:
+        # 一次查出所有条目所属题目的全部版本（命中 rootId_version_unique 索引）
+        for v in questions_repo.find_by_roots(db, [item["rootId"] for item in bank["items"]]):
+            if access.is_directly_accessible(v, owner_id):
+                by_root.setdefault(v["rootId"], []).append(v)
+
     result = []
     for item in bank["items"]:
         doc = docs.get(item["questionId"])
-        usable = doc is not None and access.is_directly_accessible(doc, bank["ownerId"])
-        result.append((item, doc if usable else None))
+        usable = doc is not None and access.is_directly_accessible(doc, owner_id)
+        resolved = ResolvedItem(item=item, version=doc if usable else None)
+        if is_owner:
+            candidates = [v for v in by_root.get(item["rootId"], []) if v["_id"] != item["questionId"]]
+            if usable:
+                candidates = [v for v in candidates if v["version"] > doc["version"]]
+            resolved.newer = max(candidates, key=lambda v: v["version"], default=None)
+            resolved.notice = _owner_notice(db, doc, usable, resolved.newer)
+        result.append(resolved)
     return result
+
+
+def _owner_notice(db: Database, doc: dict | None, usable: bool, newer: dict | None) -> str | None:
+    if usable:
+        return f"有新版本 v{newer['version']} 可换" if newer else None
+    if doc is None:
+        reason = "这个版本已不存在"
+    else:
+        author = users_repo.usernames_by_ids(db, [doc["ownerId"]]).get(doc["ownerId"], "原作者")
+        reason = f"原作者 {author} 已取消共享（或不再公开）这道题，你已不能使用这个版本"
+    action = f"请移除这一项，或换成 v{newer['version']}" if newer else "请移除这一项"
+    return f"{reason}；{action}"
 
 
 # ---------- 创建、修改、删除 ----------

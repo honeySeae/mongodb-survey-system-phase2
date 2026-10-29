@@ -281,9 +281,13 @@ def test_item_unavailable_after_original_owner_unshares(client, alice, bob):
     ok(share(client, carol, c1["id"], []))
     for headers in (alice, bob):
         item = ok(bank(client, headers, b["id"]))["items"][0]
-        assert item == {"questionId": c1["id"], "rootId": c1["rootId"], "addedAt": item["addedAt"],
-                        "available": False, "question": None}
+        assert {k: item[k] for k in ("questionId", "rootId", "available", "question")} == {
+            "questionId": c1["id"], "rootId": c1["rootId"], "available": False, "question": None}
         assert not visible(client, headers, c1["id"])
+    # 只对题库创建者说明原因；其他人只看到不可用
+    assert "carol 已取消共享" in ok(bank(client, alice, b["id"]))["items"][0]["notice"]
+    bob_item = ok(bank(client, bob, b["id"]))["items"][0]
+    assert bob_item["notice"] is None and bob_item["newerVersion"] is None
     assert ok(bank(client, alice, b["id"]))["itemCount"] == 1          # 条目保留
     assert ok(client.get(f"/api/surveys/{sid}", headers=bob))["questions"][0]["title"] == "你的年龄"
     # carol 重新共享后恢复可用
@@ -328,3 +332,78 @@ def test_switch_item_undone_if_version_deleted_concurrently(client, alice, db, m
     assert r.status_code == 404
     items = db[QUESTION_BANKS].find_one({"_id": ObjectId(b["id"])})["items"]
     assert [i["questionId"] for i in items] == [ObjectId(v1["id"])]   # 恢复为原来的版本
+
+
+# ---------- 给题库创建者的提示：有新版本可换、不可用的原因 ----------
+def item_of(client, headers, bid, index=0):
+    return ok(bank(client, headers, bid))["items"][index]
+
+
+def test_hint_newer_version(client, alice, bob):
+    v1 = create(client, alice)
+    b = new_bank(client, alice)
+    ok(add_item(client, alice, b["id"], v1["id"]), 201)
+    item = item_of(client, alice, b["id"])
+    assert item["newerVersion"] is None and item["notice"] is None      # 没有新版本时不提示
+
+    ok(derive(client, alice, v1["id"], title="v2"), 201)
+    v3 = ok(derive(client, alice, v1["id"], title="v3"), 201)
+    item = item_of(client, alice, b["id"])
+    assert item["newerVersion"] == {"questionId": v3["id"], "version": 3}   # 提示最新的
+    assert item["notice"] == "有新版本 v3 可换"
+
+    # 换成 v3 后不再提示
+    ok(client.put(f"/api/banks/{b['id']}/items/{v1['rootId']}", json={"questionId": v3["id"]}, headers=alice))
+    item = item_of(client, alice, b["id"])
+    assert item["newerVersion"] is None and item["notice"] is None
+
+    # 其他人看不到提示
+    ok(share_bank(client, alice, b["id"], ["bob"]))
+    ok(client.put(f"/api/banks/{b['id']}/items/{v1['rootId']}", json={"questionId": v1["id"]}, headers=alice))
+    other = item_of(client, bob, b["id"])
+    assert other["available"] and other["newerVersion"] is None and other["notice"] is None
+
+
+def test_hint_only_versions_owner_can_use(client, alice, bob):
+    """只提示题库创建者能直接访问的新版本：别人未共享的派生版本不算；别人共享的算。"""
+    v1 = create(client, alice)
+    ok(share(client, alice, v1["id"], ["bob"]))
+    b = new_bank(client, alice)
+    ok(add_item(client, alice, b["id"], v1["id"]), 201)
+    b2 = ok(derive(client, bob, v1["id"], title="bob 的版本"), 201)       # bob 的版本，默认不共享
+    assert item_of(client, alice, b["id"])["newerVersion"] is None
+    ok(share(client, bob, b2["id"], ["alice"]))
+    assert item_of(client, alice, b["id"])["newerVersion"] == {"questionId": b2["id"], "version": 2}
+
+
+def test_hint_ignores_older_versions(client, alice):
+    """当前项已是较新的版本时，旧版本不算“新版本”。"""
+    v1 = create(client, alice)
+    v2 = ok(derive(client, alice, v1["id"], title="v2"), 201)
+    b = new_bank(client, alice)
+    ok(add_item(client, alice, b["id"], v2["id"]), 201)
+    assert item_of(client, alice, b["id"])["newerVersion"] is None
+
+
+def test_unavailable_notice_suggests_replacement(client, alice):
+    """原作者取消共享后：提示原因；若创建者有这道题的其他可用版本（如自己派生的），建议换成它。"""
+    carol = auth_headers_for(client, "carol")
+    c1 = create(client, carol)
+    ok(share(client, carol, c1["id"], ["alice"]))
+    b = new_bank(client, alice)
+    ok(add_item(client, alice, b["id"], c1["id"]), 201)
+    ok(share(client, carol, c1["id"], []))
+    item = item_of(client, alice, b["id"])
+    assert item["available"] is False and item["newerVersion"] is None
+    assert item["notice"] == "原作者 carol 已取消共享（或不再公开）这道题，你已不能使用这个版本；请移除这一项"
+
+    # 取消共享前 alice 派生了自己的版本：建议换成它（即使当前项不可用，也只能换同一道题的版本）
+    ok(share(client, carol, c1["id"], ["alice"]))
+    mine = ok(derive(client, alice, c1["id"], title="alice 的版本"), 201)
+    ok(share(client, carol, c1["id"], []))
+    item = item_of(client, alice, b["id"])
+    assert item["newerVersion"] == {"questionId": mine["id"], "version": 2}
+    assert item["notice"].endswith("请移除这一项，或换成 v2")
+    ok(client.put(f"/api/banks/{b['id']}/items/{c1['rootId']}", json={"questionId": mine["id"]}, headers=alice))
+    item = item_of(client, alice, b["id"])
+    assert item["available"] and item["notice"] is None

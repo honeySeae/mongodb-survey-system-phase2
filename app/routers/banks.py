@@ -9,7 +9,7 @@ from pymongo.database import Database
 from app.repositories import users as users_repo
 from app.routers.question_library import names_for, version_out
 from app.schemas.banks import (BankCreate, BankItemAdd, BankItemOut, BankItemSwitch, BankList, BankOut,
-                               BankSummary, BankUpdate)
+                               BankSummary, BankUpdate, NewerVersionOut)
 from app.schemas.question_library import SharingOut, SharingUpdate
 from app.security import get_current_user, get_database
 from app.services import banks as service
@@ -42,14 +42,17 @@ def _bank_user_ids(bank: dict, user_id) -> list:
 
 def bank_out(db: Database, bank: dict, user: dict) -> BankOut:
     uid = user["_id"]
-    resolved = service.resolve_items(db, bank)
-    docs = [doc for _, doc in resolved if doc is not None]
+    resolved = service.resolve_items(db, bank, uid)
+    docs = [r.version for r in resolved if r.version is not None]
     names = users_repo.usernames_by_ids(db, _bank_user_ids(bank, uid))
     version_names = names_for(db, docs, uid)
-    items = [BankItemOut(question_id=str(item["questionId"]), root_id=str(item["rootId"]),
-                         added_at=item["addedAt"], available=doc is not None,
-                         question=version_out(doc, uid, version_names) if doc is not None else None)
-             for item, doc in resolved]
+    items = [BankItemOut(
+        question_id=str(r.item["questionId"]), root_id=str(r.item["rootId"]), added_at=r.item["addedAt"],
+        available=r.version is not None,
+        question=version_out(r.version, uid, version_names) if r.version is not None else None,
+        newer_version=NewerVersionOut(question_id=str(r.newer["_id"]), version=r.newer["version"])
+        if r.newer is not None else None,
+        notice=r.notice) for r in resolved]
     return BankOut(**_summary_fields(bank, uid, names), items=items)
 
 

@@ -22,6 +22,14 @@ def find_many(db: Database, question_ids: list[ObjectId]) -> list[dict]:
     return list(db[QUESTIONS].find({"_id": {"$in": question_ids}}))
 
 
+def find_by_roots(db: Database, root_ids: list[ObjectId]) -> list[dict]:
+    """若干道题的全部版本（不取题目内容，只取判断权限和版本号需要的字段）。"""
+    if not root_ids:
+        return []
+    return list(db[QUESTIONS].find({"rootId": {"$in": list(set(root_ids))}},
+                                   {"rootId": 1, "version": 1, "ownerId": 1, "sharing": 1}))
+
+
 def max_version(db: Database, root_id: ObjectId) -> int:
     """这道题现有的最大版本号（命中 rootId_version_unique 索引）。"""
     doc = db[QUESTIONS].find_one({"rootId": root_id}, {"version": 1}, sort=[("version", DESCENDING)])
