@@ -8,12 +8,17 @@ from pydantic import AwareDatetime
 from pymongo.database import Database
 
 from app.logic import question_access as access
+from app.logic import survey_state as state
 from app.repositories import users as users_repo
+from app.routers.surveys import survey_url
 from app.schemas.question_library import (HistoryNode, QuestionHistory, QuestionVersionCreate,
                                           QuestionVersionEdit, QuestionVersionList, QuestionVersionOut,
-                                          RestoreRequest, SharingOut, SharingResult, SharingUpdate)
+                                          QuestionUsage, RestoreRequest, SharingOut, SharingResult, SharingUpdate,
+                                          UsageSurvey)
 from app.security import get_current_user, get_database
 from app.services import question_library as service
+from app.services import usage as usage_service
+from app.utils import now_utc
 
 router = APIRouter(prefix="/api/questions", tags=["question-library"])
 
@@ -128,6 +133,26 @@ def set_sharing(question_id: str, body: SharingUpdate, user: dict = Depends(get_
     doc, count = service.set_sharing(db, user["_id"], question_id,
                                      public=body.public, usernames=body.usernames)
     return SharingResult(question=version_detail(db, doc, user), updated_versions=count)
+
+
+@router.get("/{question_id}/usage", response_model=QuestionUsage)
+def get_usage(question_id: str,
+              scope: str = Query("version", pattern="^(version|question)$",
+                                 description="version 只看这个版本 / question 整道题的所有版本"),
+              user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
+    """被哪些问卷使用：自己的问卷显示标题、状态、链接；别人的问卷只显示数量。修改前可据此决定是否创建新版本。"""
+    result = usage_service.usage(db, user["_id"], question_id, scope)
+    now = now_utc()
+    mine = [UsageSurvey(
+        id=str(m["survey"]["_id"]), title=m["survey"]["title"], status=m["survey"]["status"],
+        is_expired=state.is_expired(m["survey"]["settings"].get("deadline"), now),
+        short_code=m["survey"]["shortCode"], url=survey_url(m["survey"]["shortCode"]),
+        survey_question_id=m["survey_question_id"], question_id=str(m["source"]["questionId"]),
+        version=m["source"]["version"]) for m in result["mine"]]
+    doc = result["version"]
+    return QuestionUsage(scope=scope, question_id=str(doc["_id"]), root_id=str(doc["rootId"]), mine=mine,
+                         mine_count=len(mine), others_count=result["others_count"],
+                         total_count=len(mine) + result["others_count"])
 
 
 @router.get("/{question_id}/history", response_model=QuestionHistory)

@@ -65,6 +65,21 @@ def set_question_source(db: Database, survey_id: ObjectId, owner_id: ObjectId, q
         return_document=ReturnDocument.AFTER)
 
 
+def find_using(db: Database, source_filter: dict, owner_id: ObjectId) -> list[dict]:
+    """第二阶段：自己的问卷中使用某个版本 / 某道题的问卷（新的在前），只取列表需要的字段和题目的 source。
+    source_filter 如 {"questions.source.questionId": X} 或 {"questions.source.rootId": R}（都有索引）。"""
+    return list(db[SURVEYS].find(
+        {**source_filter, "ownerId": owner_id},
+        {"title": 1, "status": 1, "shortCode": 1, "settings.deadline": 1, "createdAt": 1,
+         "questions.id": 1, "questions.source": 1},
+    ).sort("createdAt", -1))
+
+
+def count_using_by_others(db: Database, source_filter: dict, owner_id: ObjectId) -> int:
+    """别人的问卷中使用某个版本 / 某道题的问卷数（只返回数量，不返回任何问卷信息）。"""
+    return db[SURVEYS].count_documents({**source_filter, "ownerId": {"$ne": owner_id}})
+
+
 def delete_if_status(db: Database, survey_id: ObjectId, owner_id: ObjectId, status: str) -> bool:
     result = db[SURVEYS].delete_one({"_id": survey_id, "ownerId": owner_id, "status": status})
     return result.deleted_count == 1

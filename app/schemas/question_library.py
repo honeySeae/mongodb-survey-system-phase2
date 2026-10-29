@@ -94,3 +94,27 @@ class HistoryNode(CamelModel):
 class QuestionHistory(CamelModel):
     root_id: str
     versions: list[HistoryNode]
+
+
+class UsageSurvey(CamelModel):
+    """使用这道题的一份自己的问卷。"""
+    id: str
+    title: str
+    status: str
+    is_expired: bool
+    short_code: str
+    url: str
+    survey_question_id: str   # 问卷中这道题的 id
+    question_id: str          # 问卷使用的版本 id
+    version: int              # 问卷使用的版本号
+
+
+class QuestionUsage(CamelModel):
+    """被哪些问卷使用（10.8）：自己的问卷列出详情，别人的问卷只给数量。"""
+    scope: str                # version 只看这个版本 / question 整道题的所有版本
+    question_id: str
+    root_id: str
+    mine: list[UsageSurvey]
+    mine_count: int
+    others_count: int
+    total_count: int
