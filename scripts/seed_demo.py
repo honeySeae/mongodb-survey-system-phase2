@@ -5,6 +5,9 @@
     python -m scripts.seed_demo --reset                 # 删除示例问卷及其答卷后重新生成
     python -m scripts.seed_demo --owner-password XXX    # 指定创建者密码（部署到服务器时请使用）
 
+第二阶段：本命令同时生成第二阶段的示例数据（课程评价：题目复用、版本、共享、题库、跨问卷统计），
+见 scripts/seed_phase2.py；--reset 也会重新生成第二阶段的示例数据。本文件中第一阶段的示例数据不变。
+
 直接调用服务层（与网页提交走完全相同的校验、跳转计算和提交策略），不需要先启动服务。
 数据写入 .env 中配置的数据库；问卷链接的前缀来自 PUBLIC_BASE_URL。
 
@@ -229,6 +232,11 @@ def main() -> None:
     owner_pw = f" / {args.owner_password}" if result["owner_created"] else "（账号已存在，沿用原密码）"
     print(f"  创建者账号：{OWNER}{owner_pw}，登录后在“我的问卷”中查看统计")
     print(f"  填写人账号：{RESPONDENTS[0]} ~ {RESPONDENTS[-1]}，密码 {DEFAULT_PASSWORD}（新建时）")
+
+    # 第二阶段示例数据（放在函数内导入：seed_phase2 复用了本文件的账号工具）
+    from scripts import seed_phase2
+    print()
+    seed_phase2.print_summary(seed_phase2.seed(get_db(), reset=args.reset))
 
 
 if __name__ == "__main__":
