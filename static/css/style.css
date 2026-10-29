@@ -368,6 +368,21 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   outline: 2px solid var(--primary-line); outline-offset: 2px;
 }
 
+/* 问卷编辑页：从题目库添加、换版本（第二阶段） */
+.q-title .badge.source { margin-left: 6px; font-family: var(--font-sans); font-weight: 400; align-self: center; }
+.q-title .badge.source:hover { text-decoration: none; background: var(--primary-tint); }
+.q-lib-tools { position: absolute; top: 10px; right: 20px; display: flex; gap: 2px; background: var(--paper); }
+@media (max-width: 600px) { .q-lib-tools { position: static; justify-content: flex-end; margin-bottom: 4px; } }
+.library-picker .seg { margin-top: 10px; }
+.pick-list { display: flex; flex-direction: column; margin-top: 6px; }
+.pick-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+            padding: 8px 4px; border-bottom: 1px dashed var(--rule); background: var(--paper); }
+.pick-row.used { opacity: .6; }
+.pick-main { flex: 1; min-width: 220px; }
+.pick-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.pick-title a.muted { font-weight: 400; }
+.pick-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
 /* ---------- 手机 ---------- */
 @media (max-width: 600px) {
   .page { padding: 0 0 40px; }

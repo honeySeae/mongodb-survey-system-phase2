@@ -1,17 +1,19 @@
 // 编辑问卷页：问卷设置、发布/关闭/删除、题目（所见即所得）的添加、修改、删除、调整顺序与跳转规则。
 // 所有修改题目的请求都带 expectedUpdatedAt；保存后以后端返回的整份问卷为准重新渲染。
+// 第二阶段：从题目库添加、换版本、存入题目库（面板见 edit-library.js）；来自题目库的题显示来源标签。
 import { api, requireLogin, withQuery } from "./api.js";
 import { createDeadlinePicker } from "./deadline.js";
 import { bindOptionHighlight, el, errorNotice, linkBox, pathSegment, POLICY_LABELS, renderTopbar, statusBadge, toast } from "./layout.js";
 import { createQuestionEditor } from "./question-editor.js";
 import { createQuestionView, TYPE_LABELS } from "./render.js";
+import { createLibraryPicker, createSwitchPanel, sourceBadge } from "./edit-library.js";
 
 const $ = (id) => document.getElementById(id);
 const surveyId = pathSegment(1);
 
 let survey = null;
 let meta = null;
-let editor = null;          // 当前打开的编辑器：{ key: 题目 id 或 "new", instance }
+let editor = null;          // 当前打开的编辑器：{ key: 题目 id、"new"、"library"（从题目库添加）或 "switch:<题目 id>", instance }
 let deadlinePicker = null;
 
 if (requireLogin()) {
@@ -187,17 +189,19 @@ function renderQuestions(errorsByQuestion = {}) {
   const list = $("questions");
   list.replaceChildren();
   survey.questions.forEach((q, i) => {
-    if (editor && editor.key === q.id) {
+    if (editor && (editor.key === q.id || editor.key === `switch:${q.id}`)) {
       list.append(editor.instance.element);
       return;
     }
     const view = createQuestionView(q, i + 1, { disabled: true });
     view.setWarnings(warningsOf(q.id));
     if (errorsByQuestion[q.id]) view.setError(errorsByQuestion[q.id]);
+    if (q.source) view.element.querySelector(".q-title").append(sourceBadge(q));
     if (editable()) view.element.prepend(questionTools(q, i));
+    else if (!q.source) view.element.prepend(libraryTools(q));
     list.append(view.element);
   });
-  if (editor && editor.key === "new") list.append(editor.instance.element);
+  if (editor && (editor.key === "new" || editor.key === "library")) list.append(editor.instance.element);
   if (!survey.questions.length && !(editor && editor.key === "new")) {
     list.append(el("div", { class: "empty", text: editable() ? "还没有题目，在下方选择题型添加第一道题" : "这份问卷没有题目" }));
   }
@@ -210,7 +214,16 @@ function questionTools(q, i) {
     el("button", { class: "btn small link", type: "button", text: "编辑", onclick: () => openEditor(q.id) }),
     el("button", { class: "btn small link muted", type: "button", text: "上移", disabled: i === 0, onclick: () => move(i, -1) }),
     el("button", { class: "btn small link muted", type: "button", text: "下移", disabled: i === n - 1, onclick: () => move(i, 1) }),
-    el("button", { class: "btn small link muted", type: "button", text: "删除", onclick: () => removeQuestion(q, i) }));
+    el("button", { class: "btn small link muted", type: "button", text: "删除", onclick: () => removeQuestion(q, i) }),
+    q.source
+      ? el("button", { class: "btn small link muted", type: "button", text: "换版本", onclick: () => openSwitch(q, i) })
+      : el("button", { class: "btn small link muted", type: "button", text: "存入题目库", onclick: () => saveToLibrary(q) }));
+}
+
+/** 已发布、已关闭的问卷：问卷中直接建的题仍可以存入题目库（只补来源信息，不改题目内容）。 */
+function libraryTools(q) {
+  return el("div", { class: "q-lib-tools" },
+    el("button", { class: "btn small link muted", type: "button", text: "存入题目库", onclick: () => saveToLibrary(q) }));
 }
 
 function renderAddBar() {
@@ -218,6 +231,69 @@ function renderAddBar() {
   for (const type of meta.questionTypes) {
     bar.append(el("button", { class: "btn small ghost", type: "button", text: `＋ ${TYPE_LABELS[type] || type}`,
                               onclick: () => openEditor("new", type) }));
+  }
+  bar.append(el("button", { class: "btn small ghost", type: "button", text: "从题目库添加", onclick: openLibraryPicker }));
+}
+
+// ---------- 第二阶段：题目库 ----------
+function openPanel(key, instance) {
+  if (!confirmDiscard()) return;
+  editor = { key, instance };
+  $("questions-message").replaceChildren();
+  renderQuestions();
+  instance.element.scrollIntoView({ behavior: "smooth", block: "start" });
+  instance.focus();
+}
+
+function openLibraryPicker() {
+  openPanel("library", createLibraryPicker({
+    survey,
+    async onAdd(questionId, required) {
+      try {
+        survey = await api("POST", questionsPath("/from-library"), { questionId, required });
+      } catch (err) {
+        if (err.code === "EDIT_CONFLICT") return showConflict(err);
+        throw err;   // 由面板显示
+      }
+      closeEditor();
+      renderAll();
+      toast("已添加；可以“编辑”这道题设置是否必答和跳转规则");
+    },
+    onCancel: () => { closeEditor(); renderQuestions(); },
+  }));
+}
+
+function openSwitch(q, i) {
+  openPanel(`switch:${q.id}`, createSwitchPanel({
+    question: q, number: i + 1,
+    async onSwitch(versionId) {
+      try {
+        survey = await api("PUT", questionsPath(`/${encodeURIComponent(q.id)}/version`), { questionId: versionId });
+      } catch (err) {
+        if (err.code === "EDIT_CONFLICT") return showConflict(err);
+        throw err;
+      }
+      closeEditor();
+      renderAll();
+      const qNow = survey.questions.find((x) => x.id === q.id);
+      toast(`已换成 v${qNow.source.version}`);
+    },
+    onCancel: () => { closeEditor(); renderQuestions(); },
+  }));
+}
+
+async function saveToLibrary(q) {
+  if (!confirmDiscard()) return;
+  const lockNote = editable() ? "存入后，这道题在问卷中只能修改是否必答和跳转规则。" : "题目内容和已收集的答卷都不会改变。";
+  if (!confirm(`把「${q.title}」存入题目库？会生成一道新题 v1，之后可以在其他问卷中使用。${lockNote}`)) return;
+  try {
+    const r = await api("POST", `/api/surveys/${survey.id}/questions/${encodeURIComponent(q.id)}/save-to-library`);
+    survey = r.survey;
+    closeEditor();
+    renderAll();
+    toast("已存入题目库（v1）");
+  } catch (err) {
+    showQuestionsError(err, q.id);
   }
 }
 

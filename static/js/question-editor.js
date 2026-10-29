@@ -1,6 +1,8 @@
 // 单道题的编辑表单（就地展开在题目卡片中）：题型、题目、必答、选项、校验规则、跳转规则，下方实时预览。
 // 跳转规则用下拉框设置，不需要手写 id；可选的运算符与值的格式来自 /api/meta（后端运算符表），前端不维护副本。
 // 目标下拉框只列出本题之后的题和“结束问卷”，从界面上就选不到往前跳。合法性仍以后端检查为准。
+// 第二阶段：来自题目库的题（有 source）内容和校验不能在问卷里改，表单中这些输入框不可编辑，只能改必答和跳转规则；
+// 没有 source 的题行为不变。
 import { el } from "./layout.js";
 import { createQuestionView, parseNumberInput, TYPE_LABELS } from "./render.js";
 
@@ -37,6 +39,7 @@ const truncate = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
 export function createQuestionEditor(opts) {
   const { question, index, questions, meta } = opts;
   const isNew = !question;
+  const contentLocked = Boolean(question && question.source);   // 第二阶段：来自题目库的题
   const number = index + 1;
 
   // ---------- 编辑中的状态 ----------
@@ -67,6 +70,11 @@ export function createQuestionEditor(opts) {
   // ---------- 小部件 ----------
   function field(label, control, extraClass = "") {
     return el("div", { class: `editor-row ${extraClass}` }, el("span", { class: "editor-label", text: label }), control);
+  }
+
+  function lockable(input) {
+    input.disabled = contentLocked;
+    return input;
   }
 
   function numberBox(value, dataField, onInput) {
@@ -102,6 +110,7 @@ export function createQuestionEditor(opts) {
     const typeSelect = select(meta.questionTypes.map((t) => [t, TYPE_LABELS[t] || t]), state.type, "type", (t) => {
       changeType(t);
     });
+    typeSelect.disabled = contentLocked;
     const req = el("label", { class: `option checkbox${state.required ? " is-checked" : ""}` },
       el("input", { type: "checkbox", checked: state.required, onchange: (e) => {
         state.required = e.target.checked;
@@ -114,7 +123,7 @@ export function createQuestionEditor(opts) {
 
   function titleRow() {
     return field("题目", el("input", { class: "input", value: state.title, maxlength: meta.limits.questionTitleMax,
-      placeholder: "请输入题目", dataset: { field: "title" },
+      placeholder: "请输入题目", dataset: { field: "title" }, disabled: contentLocked,
       oninput: (e) => { state.title = e.target.value; touch(); } }));
   }
 
@@ -125,9 +134,9 @@ export function createQuestionEditor(opts) {
       list.append(el("div", { class: "editor-option" },
         el("span", { class: `mark-static ${state.type === "single_choice" ? "radio" : "checkbox"}` }),
         el("input", { class: "input", value: o.text, placeholder: `选项 ${i + 1}`, maxlength: meta.limits.optionTextMax,
-                      dataset: { field: `options[${i}].text` },
+                      dataset: { field: `options[${i}].text` }, disabled: contentLocked,
                       oninput: (e) => { o.text = e.target.value; touch(); } }),
-        el("button", { class: "btn link muted", type: "button", title: "删除选项", text: "删除",
+        contentLocked ? null : el("button", { class: "btn link muted", type: "button", title: "删除选项", text: "删除",
                        disabled: state.options.length <= 1,
                        onclick: () => { state.options.splice(i, 1); dirty = true; render(); } })));
     });
@@ -135,7 +144,7 @@ export function createQuestionEditor(opts) {
       disabled: state.options.length >= meta.limits.optionsMax,
       onclick: () => { state.options.push({ text: "" }); dirty = true; render();
                        element.querySelector(`[data-field="options[${state.options.length - 1}].text"]`)?.focus(); } });
-    return field("选项", el("div", {}, list, add), "top");
+    return field("选项", el("div", {}, list, contentLocked ? null : add), "top");
   }
 
   function validationBlock() {
@@ -145,12 +154,13 @@ export function createQuestionEditor(opts) {
     for (const [key, before, after] of inputs) {
       // 注意：原生 append/replaceChildren 会把 null 显示成文字 "null"，可能为空的部分要先过滤
       row.append(...[el("span", { class: "muted", text: before }),
-        numberBox(state.validation[key], `validation.${key}`, (val) => { state.validation[key] = val; touch(); }),
+        lockable(numberBox(state.validation[key], `validation.${key}`, (val) => { state.validation[key] = val; touch(); })),
         after ? el("span", { class: "muted", text: after }) : null].filter(Boolean));
     }
     if (state.type === "number") {
-      row.append(el("label", { class: `option checkbox${state.integerOnly ? " is-checked" : ""}` },
+      row.append(el("label", { class: `option checkbox${state.integerOnly ? " is-checked" : ""}${contentLocked ? " disabled" : ""}` },
         el("input", { type: "checkbox", checked: state.integerOnly, dataset: { field: "validation.integerOnly" },
+          disabled: contentLocked,
           onchange: (e) => { state.integerOnly = e.target.checked;
                              e.target.closest(".option").classList.toggle("is-checked", state.integerOnly); touch(); } }),
         el("span", { class: "mark" }), el("span", { text: "必须为整数" })));
@@ -306,6 +316,8 @@ export function createQuestionEditor(opts) {
       el("div", { class: "editor-head", text: isNew ? `新建第 ${number} 题` : `编辑第 ${number} 题` }),
       errorBox,
       typeNote ? el("div", { class: "notice warn", text: typeNote }) : null,
+      contentLocked ? el("div", { class: "notice info", text: `这道题来自题目库（v${question.source.version}）：` +
+        "题目、选项和校验不能在问卷里修改，只能改是否必答和跳转规则。要修改内容，请在题目库中创建新版本，再在这里“换版本”。" }) : null,
       typeAndRequired(), titleRow(), optionsBlock(), validationBlock(), logicBlock(),
       preview,
       el("div", { class: "actions mt" }, saveBtn, cancelBtn)].filter(Boolean));

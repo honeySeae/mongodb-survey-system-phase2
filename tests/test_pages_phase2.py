@@ -20,7 +20,8 @@ def test_library_pages_served_as_html(client, path, marker):
 
 
 @pytest.mark.parametrize("path", ["/static/js/questions.js", "/static/js/question.js",
-                                  "/static/js/library-editor.js", "/static/js/library-common.js"])
+                                  "/static/js/library-editor.js", "/static/js/library-common.js",
+                                  "/static/js/edit-library.js"])
 def test_library_scripts(client, path):
     resp = client.get(path)
     assert resp.status_code == 200 and resp.headers["content-type"].startswith("text/javascript")
