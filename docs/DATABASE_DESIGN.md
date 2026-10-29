@@ -735,6 +735,34 @@ logic: {
 - **人数**：合并后的“答卷数”是各问卷相加；“作答人数”跨问卷去重（同一个人填了两份问卷算 1 人）。每份问卷各自的数据与第一阶段 6.7 口径相同。
 - **文本、数字题的内容**：合并后按提交时间倒序分页，每条附上所在问卷的标题，不附填写人。
 - 只依赖 `surveys.questions.source`：旧问卷里的题补上 `source`（10.5）之后，它的旧答卷也会计入。
+- **实现约定**（第 9 步）：接口 `GET /api/questions/{id}/stats?versionId=...&offset=&limit=`（`versionId` 可重复，必须是这道题的版本；`offset`、`limit` 用于文本、数字内容分页，每页最多 200 条）。能访问这个版本的人都可以查，但只统计**自己的**问卷。
+  - 返回：`overall`（问卷数、答卷数、作答人数、合并后的选项次数 / 平均值 / 内容列表）和 `surveys`（每份问卷的标题、状态、链接、提交策略、使用的版本、答卷数、作答人数、该问卷自己的选项次数 / 平均值）。每份问卷的数据与第一阶段单份问卷的单题统计一致（有测试逐项比较）。
+  - 合并后的选项：各版本选项的并集，顺序和文字以版本号最大的版本为准，其后是只在旧版本中出现的选项。数字题总体平均值按全部答案计算（不是各问卷平均值的平均）。
+  - 题目文字取参与统计的版本中版本号最大的。
+
+**跨问卷统计的聚合管道**（`app/stats/cross_pipelines.py`，只构造、不执行）：结构与 6.8 的单份问卷管道相同，只是把“一份问卷 + 一道题”换成多个目标——每份问卷中这道题的 id 不同、统计口径也可能不同：
+
+```js
+{ $match: { $or: [ { surveyId: S1, ...口径1, "answers.questionId": Q1 },     // ① 每份问卷：自己的口径、答了这道题
+                   { surveyId: S2, ...口径2, "answers.questionId": Q2 } ] } },
+{ $unwind: "$answers" },                                                      // ② 拆开答案
+{ $match: { $or: [ { surveyId: S1, "answers.questionId": Q1 },               // ③ 只保留各问卷中这道题的答案
+                   { surveyId: S2, "answers.questionId": Q2 } ] } },
+{ $facet: {
+    perSurvey: [ { $group: { _id: { s: "$surveyId", r: "$respondentId" }, n: { $sum: 1 } } },
+                 { $group: { _id: "$_id.s", respondentCount: { $sum: 1 }, answerCount: { $sum: "$n" } } } ],
+    overall:   [ { $group: { _id: "$respondentId", n: { $sum: 1 } } },       // 作答人数跨问卷去重
+                 { $group: { _id: null, respondentCount: { $sum: 1 }, answerCount: { $sum: "$n" } } } ],
+    byOption:  [ /* 多选先 $unwind value */ { $group: { _id: { s: "$surveyId", o: "$answers.value" }, count: { $sum: 1 } } } ],
+    items:     [ { $sort: { submittedAt: -1, _id: -1 } }, { $skip: k }, { $limit: n },
+                 { $project: { _id: 0, surveyId: 1, value: "$answers.value", submittedAt: 1 } } ],   // 文本、数字
+    average:        [ { $group: { _id: "$surveyId", value: { $avg: "$answers.value" } } } ],          // 数字
+    overallAverage: [ { $group: { _id: null, value: { $avg: "$answers.value" } } } ]
+} }
+```
+
+- 选择题的总体次数由 `byOption` 中各问卷的次数相加得到，不另做一次分组。
+- **不显示填写人**：没有 `$lookup`，任何 `$project` 都不输出 `respondentId`（有测试检查管道结构和接口返回内容）；第一步可以使用索引（测试中 `explain` 为 `IXSCAN`）。
 
 ### 10.9 权限与删除
 
@@ -813,3 +841,4 @@ logic: {
 | 2026-10-29 | 10.7 补充第 7 步题库的实现约定（接口、条目用 `rootId` 标识、长度和数量上限、原子更新、不可用条目的返回、只通过题库访问的版本不能再加入题库、从题库选题的方式、并发处理） | 第 7 步实现 |
 | 2026-10-29 | 10.7 题库详情增加给创建者的提示：有新版本可换（`newerVersion`）、条目不可用的原因和处理办法；其他人只看到可用 / 不可用 | 开发者要求（第 7 步确认时补充） |
 | 2026-10-29 | 10.8 补充第 8 步“被哪些问卷使用”的实现约定（接口、返回内容、计入哪些问卷） | 第 8 步实现 |
+| 2026-10-29 | 10.8 补充第 9 步单题跨问卷统计的实现约定（接口、返回内容、选项合并顺序、平均值算法）和聚合管道 | 第 9 步实现 |

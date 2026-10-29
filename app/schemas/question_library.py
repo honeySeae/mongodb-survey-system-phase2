@@ -118,3 +118,53 @@ class QuestionUsage(CamelModel):
     mine_count: int
     others_count: int
     total_count: int
+
+
+# ---------- 单题跨问卷统计（10.8） ----------
+class CrossOptionCount(CamelModel):
+    id: str
+    text: str
+    count: int
+
+
+class CrossItem(CamelModel):
+    """合并后的一条填空内容：附所在问卷，不附填写人。"""
+    survey_id: str
+    survey_title: str
+    value: Any
+    submitted_at: datetime
+
+
+class CrossOverall(CamelModel):
+    survey_count: int
+    answer_count: int        # 各问卷答卷数之和
+    respondent_count: int    # 跨问卷去重后的作答人数
+    options: list[CrossOptionCount] | None = None   # 单选、多选
+    average: float | None = None                    # 数字（按全部答案计算）
+    items: list[CrossItem] | None = None            # 文本、数字（分页）
+    items_total: int | None = None
+
+
+class CrossSurveyStats(CamelModel):
+    survey_id: str
+    title: str
+    status: str
+    url: str
+    submission_policy: str
+    survey_question_id: str
+    question_id: str         # 这份问卷使用的版本 id
+    version: int
+    answer_count: int
+    respondent_count: int
+    options: list[CrossOptionCount] | None = None
+    average: float | None = None
+
+
+class CrossQuestionStats(CamelModel):
+    question_id: str
+    root_id: str
+    type: str
+    title: str
+    version_filter: list[str] | None  # 按版本筛选时的版本 id；null 表示合并所有版本
+    overall: CrossOverall
+    surveys: list[CrossSurveyStats]

@@ -75,6 +75,16 @@ def find_using(db: Database, source_filter: dict, owner_id: ObjectId) -> list[di
     ).sort("createdAt", -1))
 
 
+def find_for_cross_stats(db: Database, owner_id: ObjectId, root_id: ObjectId,
+                         statuses: list[str]) -> list[dict]:
+    """第二阶段跨问卷统计：自己的、指定状态的、使用这道题的问卷（只取统计需要的字段和题目）。"""
+    return list(db[SURVEYS].find(
+        {"questions.source.rootId": root_id, "ownerId": owner_id, "status": {"$in": statuses}},
+        {"title": 1, "status": 1, "shortCode": 1, "settings.submissionPolicy": 1, "createdAt": 1,
+         "questions": 1},
+    ).sort("createdAt", -1))
+
+
 def count_using_by_others(db: Database, source_filter: dict, owner_id: ObjectId) -> int:
     """别人的问卷中使用某个版本 / 某道题的问卷数（只返回数量，不返回任何问卷信息）。"""
     return db[SURVEYS].count_documents({**source_filter, "ownerId": {"$ne": owner_id}})
