@@ -62,7 +62,8 @@ await scenario("题目库页", async (t) => {
   await b.waitFor(`document.querySelectorAll("#history .history-row").length === 2`, "历史中有 2 个版本");
   assert.deepEqual(await t.texts("#history .badge.version"), ["v1", "v2"]);
   assert.equal(await b.eval(`document.querySelector("#history .history-row.current").style.paddingLeft`), "28px");
-  t.step("另存为新版本 v2；版本历史显示 v1 → v2（v2 缩进在 v1 之下）");
+  assert.deepEqual(await t.texts("#history .history-diff"), ["最初的版本", "与 v1 相比：选项「女」→「女性」"]);
+  t.step("另存为新版本 v2；版本历史显示 v1 → v2（v2 缩进在 v1 之下），并说明每个版本改了什么");
 
   // ---------- 加进问卷后锁定 ----------
   const survey = ok(await t.api("POST", "/api/surveys", { title: "期中调查" }, owner), 201);
@@ -70,13 +71,15 @@ await scenario("题目库页", async (t) => {
   await b.goto(`${t.base}/questions/${v1Id}`);
   await detailLoaded("性别");
   assert.ok((await t.text("#state-note")).includes("已被问卷使用，不能直接修改"));
-  assert.deepEqual(await t.texts("#actions button"), ["基于此版本创建新版本", "恢复此版本"]);
+  assert.deepEqual(await t.texts("#actions button"), ["基于此版本创建新版本", "恢复此版本", "删除此版本"]);
+  assert.equal(await b.eval(`[...document.querySelectorAll("#actions button")].find((x) => x.textContent === "删除此版本").disabled`), true);
+  assert.equal(await t.text("#actions .action-note"), "不能删除：这个版本已被问卷使用，不能删除");
   await b.waitFor(`document.querySelectorAll("#usage .usage-item").length === 1`, "使用情况");
   assert.ok((await t.text("#usage .usage-item")).includes("期中调查"));
   assert.ok((await t.text("#usage")).includes("你的问卷 1 份"));
   await t.click("#usage-scope button", "整道题（所有版本）");
   await b.waitFor(`document.querySelector("#usage .muted")?.textContent.includes("共 1 份")`, "整道题的使用情况");
-  t.step("v1 被问卷使用后：提示不能直接修改，只能创建新版本；显示被“期中调查”使用");
+  t.step("v1 被问卷使用后：提示不能直接修改，只能创建新版本；删除按钮变灰并说明原因；显示被“期中调查”使用");
   await t.shot("已使用的版本");
 
   // ---------- 恢复旧版本 ----------
@@ -86,6 +89,7 @@ await scenario("题目库页", async (t) => {
   assert.deepEqual(await t.texts("#preview .option"), ["男", "女", "不愿透露"]);
   await b.waitFor(`document.querySelectorAll("#history .history-row").length === 3`, "历史中有 3 个版本");
   assert.ok((await t.text("#history .history-row.current")).includes("恢复自 v1"));
+  assert.equal(await t.text("#history .history-row.current .history-diff"), "与 v2 相比：选项「女性」→「女」");
   t.step("恢复 v1：生成 v3（内容同 v1），接在 v2 后面，标注“恢复自 v1”");
   await t.shot("版本历史");
 
@@ -105,8 +109,10 @@ await scenario("题目库页", async (t) => {
   await t.login("ui_lib_bob");
   await b.goto(`${t.base}/questions`);
   await t.click("#tabs button", "共享给我的");
-  await b.waitFor(`document.querySelectorAll("#list .lib-item").length === 3`, "共享给我的 3 个版本");
+  await b.waitFor(`document.querySelectorAll("#list .lib-item").length === 1`, "共享给我的：同一道题只出现一次");
   assert.ok((await t.text("#list .lib-item .meta")).includes("来自 ui_lib_alice"));
+  assert.deepEqual(await t.texts("#list .lib-item .lib-versions a"), ["v1", "v2", "v3"]);
+  assert.equal(await t.text("#list .lib-item h3 .badge.version"), "v3");
   await b.goto(`${t.base}/questions/${v1Id}`);
   await detailLoaded("性别");
   assert.ok((await t.text("#state-note")).includes("这是 ui_lib_alice 的题目"));
@@ -115,8 +121,17 @@ await scenario("题目库页", async (t) => {
   assert.ok(!(await t.text("#meta")).includes("ui_lib_bob"), "不显示共享名单");
   await b.waitFor(`document.querySelector("#usage .muted")?.textContent.includes("别人的问卷 1 份")`, "别人的问卷只显示数量");
   assert.ok(!(await t.text("#usage")).includes("期中调查"));
-  t.step("被共享的人：在“共享给我的”中看到；只能基于它创建自己的新版本；看不到共享名单和别人问卷的标题");
+  t.step("被共享的人：“共享给我的”中这道题只出现一次（列出 v1、v2、v3）；只能基于它创建自己的新版本；看不到共享名单和别人问卷的标题");
   await t.shot("被共享的人看到的详情");
+
+  // ---------- 焦点框 ----------
+  // 无界面 Chrome 中鼠标点击本来就不显示焦点框，无法复现；这里检查样式表中确有两条规则：
+  // 非键盘操作时不显示焦点框；键盘操作时为靛蓝色细框（不是浏览器默认的黑色 / 系统色）
+  const rules = await b.eval(`[...document.styleSheets].flatMap((sh) => [...sh.cssRules])
+    .filter((r) => r.selectorText && r.selectorText.includes("focus")).map((r) => r.cssText)`);
+  assert.ok(rules.some((r) => r.startsWith(":focus:not(:focus-visible)") && r.includes("outline: none")), rules.join(" | "));
+  assert.ok(rules.some((r) => r.includes("button:focus-visible") && r.includes("var(--primary-line)")), rules.join(" | "));
+  t.step("样式表规定：鼠标点击不显示焦点框，键盘操作时为靛蓝色细框");
 
   // ---------- 删除 ----------
   await t.logout();
@@ -127,7 +142,7 @@ await scenario("题目库页", async (t) => {
   await b.eval("window.confirm = () => true; true");   // 换了页面，需要重新替换确认框
   await t.click("#actions button", "删除此版本");
   await b.waitFor(`location.pathname === "/questions"`, "删除后回到列表");
-  await b.waitFor(`document.querySelectorAll("#list .lib-item").length === 3`, "列表剩 3 个版本");
+  await b.waitFor(`document.querySelectorAll("#list .lib-item").length === 1`, "列表剩 1 道题");
   assert.ok(!(await t.texts("#list .lib-item h3 a")).includes("临时题"));
   t.step("删除未使用的版本后回到题目库列表");
 

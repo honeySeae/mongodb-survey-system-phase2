@@ -2,7 +2,7 @@
 import { api, requireLogin, withQuery } from "./api.js";
 import { bindOptionHighlight, el, errorNotice, formatTime, linkBox, pathSegment, renderTopbar, statusBadge, toast } from "./layout.js";
 import { createContentEditor } from "./library-editor.js";
-import { flattenTree, parseUsernames, sharingText, versionBadge } from "./library-common.js";
+import { changeSummary, flattenTree, parseUsernames, sharingText, versionBadge } from "./library-common.js";
 import { createQuestionView, TYPE_LABELS } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
@@ -85,10 +85,14 @@ function renderActions() {
     buttons.push(el("button", { class: "btn small ghost", type: "button", text: "恢复此版本", onclick: restore,
       title: "把这个版本的内容复制成一个新版本，接在你最新的版本后面" }));
   }
-  if (question.isMine && !question.locked) {
-    buttons.push(el("button", { class: "btn small danger", type: "button", text: "删除此版本", onclick: remove }));
+  let reason = null;
+  if (question.isMine) {
+    // 不能删除时按钮变灰并说明原因（原因由后端给出，与删除时的检查一致）
+    buttons.push(el("button", { class: "btn small danger", type: "button", text: "删除此版本", onclick: remove,
+      disabled: !question.canDelete, title: question.deleteBlockedReason || null }));
+    if (!question.canDelete) reason = el("div", { class: "muted action-note", text: `不能删除：${question.deleteBlockedReason}` });
   }
-  $("actions").replaceChildren(...buttons);
+  $("actions").replaceChildren(...buttons, ...(reason ? [reason] : []));
 }
 
 function openEditor(mode) {
@@ -101,11 +105,15 @@ function openEditor(mode) {
       editor.setBusy(true);
       try {
         if (editing) {
-          question = await api("PUT", withQuery(`/api/questions/${question.id}`, { expectedUpdatedAt: question.updatedAt }), body);
-          history = await api("GET", `/api/questions/${question.id}/history`);
+          await api("PUT", withQuery(`/api/questions/${question.id}`, { expectedUpdatedAt: question.updatedAt }), body);
+          [question, history] = await Promise.all([
+            api("GET", `/api/questions/${question.id}`),
+            api("GET", `/api/questions/${question.id}/history`),
+          ]);
           closeEditor();
           renderHead();
           renderPreview();
+          renderActions();
           renderHistory();
           toast("已保存");
         } else {
@@ -153,6 +161,7 @@ async function remove() {
 // ---------- 版本历史 ----------
 function renderHistory() {
   const versionOf = new Map(history.versions.map((v) => [v.id, v.version]));
+  const byId = new Map(history.versions.map((v) => [v.id, v]));
   const rows = flattenTree(history.versions).map(({ node, depth }) => {
     const current = node.id === question.id;
     const extra = [];
@@ -171,7 +180,8 @@ function renderHistory() {
       el("span", { class: "badge version", text: `v${node.version}` }),
       ...body,
       extra.length ? el("span", { class: "muted", text: extra.join(" · ") }) : null,
-      current ? el("span", { class: "muted", text: "（当前查看）" }) : null);
+      current ? el("span", { class: "muted", text: "（当前查看）" }) : null,
+      node.accessible ? el("div", { class: "history-diff", text: changeSummary(node, byId) }) : null);
   });
   $("history").replaceChildren(...rows);
 }

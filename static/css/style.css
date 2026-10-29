@@ -357,6 +357,17 @@ select:focus { border-color: var(--primary); }
 .usage-item { padding: 8px 0 2px; border-bottom: 1px dashed var(--rule); }
 .usage-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
 
+.history-diff { flex-basis: 100%; font-size: 12.5px; color: var(--ink-soft); padding-left: 2px; }
+.lib-versions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
+.lib-versions a.badge:hover { text-decoration: none; background: var(--primary-tint); }
+.lib-versions a.badge.latest { background: var(--primary-tint); }
+.action-note { flex-basis: 100%; }
+/* 焦点框：鼠标点击时不显示浏览器默认的黑色焦点框；用键盘（Tab）切换时显示靛蓝色焦点框，便于不用鼠标操作 */
+:focus:not(:focus-visible) { outline: none; }
+button:focus-visible, a:focus-visible, select:focus-visible {
+  outline: 2px solid var(--primary-line); outline-offset: 2px;
+}
+
 /* ---------- 手机 ---------- */
 @media (max-width: 600px) {
   .page { padding: 0 0 40px; }

@@ -7,6 +7,7 @@ from bson import ObjectId
 
 from app.db import QUESTION_BANKS, QUESTIONS
 from app.utils import now_utc
+from tests.conftest import auth_headers_for
 
 AGE = {"type": "number", "title": "你的年龄", "validation": {"min": 0, "max": 150, "integerOnly": True}}
 GENDER = {"type": "single_choice", "title": "性别", "options": [{"text": "男"}, {"text": "女"}]}
@@ -368,3 +369,80 @@ def test_derive_undone_if_parent_deleted_concurrently(client, alice, db, monkeyp
     monkeypatch.setattr(repo, "insert", insert_then_parent_deleted)
     assert derive(client, alice, v1["id"], title="v2").status_code == 404
     assert db[QUESTIONS].count_documents({}) == 0
+
+
+# ---------- 按题目分组的列表（页面修改意见：同一道题不重复出现） ----------
+def groups(client, headers, **params):
+    return ok(client.get("/api/questions/groups", params=params, headers=headers))
+
+
+def test_grouped_list_one_item_per_question(client, alice):
+    v1 = create(client, alice)
+    v2 = ok(derive(client, alice, v1["id"], title="v2"), 201)
+    v3 = ok(derive(client, alice, v1["id"], title="v3"), 201)
+    other = create(client, alice, GENDER)
+    data = groups(client, alice)
+    assert data["total"] == 2
+    by_root = {g["rootId"]: g for g in data["items"]}
+    g = by_root[v1["rootId"]]
+    assert g["latest"]["id"] == v3["id"]                                    # 代表版本：版本号最大
+    assert [(v["id"], v["version"], v["owner"]) for v in g["versions"]] == [
+        (v1["id"], 1, "alice"), (v2["id"], 2, "alice"), (v3["id"], 3, "alice")]
+    assert [v["version"] for v in by_root[other["rootId"]]["versions"]] == [1]
+    # 最近修改的题在前
+    assert data["items"][0]["rootId"] == other["rootId"]
+
+
+def test_grouped_list_scopes(client, alice, bob, db):
+    """共享给我的：同一道题只出现一次，只含共享给我的版本；别人派生、未共享的版本不出现。"""
+    v1 = create(client, alice)
+    ok(derive(client, alice, v1["id"], title="v2"), 201)
+    ok(client.put(f"/api/questions/{v1['id']}/sharing", json={"public": False, "usernames": ["bob"]}, headers=alice))
+    carol = auth_headers_for(client, "carol")
+    ok(client.put(f"/api/questions/{v1['id']}/sharing", json={"public": False, "usernames": ["bob", "carol"]},
+                  headers=alice))
+    ok(derive(client, carol, v1["id"], title="carol 的版本"), 201)            # 未共享，bob 看不到
+    data = groups(client, bob, scope="shared")
+    assert data["total"] == 1
+    g = data["items"][0]
+    assert [v["version"] for v in g["versions"]] == [1, 2] and g["latest"]["version"] == 2
+    assert g["latest"]["sharing"] is None                                     # 共享名单只给所有者
+    assert groups(client, bob, scope="mine")["total"] == 0
+    assert client.get("/api/questions/groups", params={"scope": "x"}, headers=bob).status_code == 422
+
+
+def test_grouped_list_pagination(client, alice):
+    for i in range(5):
+        create(client, alice, {**AGE, "title": f"题 {i}"})
+    page = groups(client, alice, offset=1, limit=2)
+    assert page["total"] == 5 and [g["latest"]["title"] for g in page["items"]] == ["题 3", "题 2"]
+
+
+# ---------- 详情中给出能否删除及原因（页面修改意见：删除按钮变灰并说明原因） ----------
+def test_detail_reports_delete_block(client, alice, bob, db):
+    v1 = create(client, alice)
+    detail = ok(client.get(f"/api/questions/{v1['id']}", headers=alice))
+    assert (detail["canDelete"], detail["deleteBlockedReason"]) == (True, None)
+
+    v2 = ok(derive(client, alice, v1["id"], title="v2"), 201)
+    detail = ok(client.get(f"/api/questions/{v1['id']}", headers=alice))
+    assert detail["canDelete"] is False and "派生" in detail["deleteBlockedReason"]
+
+    lock(db, v2["id"])
+    detail = ok(client.get(f"/api/questions/{v2['id']}", headers=alice))
+    assert detail["canDelete"] is False and "已被问卷使用" in detail["deleteBlockedReason"]
+
+    v3 = ok(client.post(f"/api/questions/{v1['id']}/restore", headers=alice), 201)
+    db[QUESTION_BANKS].insert_one({
+        "ownerId": ObjectId(), "name": "别人的题库", "description": "",
+        "items": [{"questionId": ObjectId(v3["id"]), "rootId": ObjectId(v1["id"]), "addedAt": now_utc()}],
+        "sharing": {"public": False, "userIds": []}, "createdAt": now_utc(), "updatedAt": now_utc()})
+    detail = ok(client.get(f"/api/questions/{v3['id']}", headers=alice))
+    assert detail["canDelete"] is False and "题库" in detail["deleteBlockedReason"]
+    # 与删除接口给出的原因一致
+    assert client.delete(f"/api/questions/{v3['id']}", headers=alice).json()["message"] == detail["deleteBlockedReason"]
+
+    # 不是所有者：不返回（页面不显示删除按钮）
+    share_with(db, v1["id"], user_id(db, "bob"))
+    seen = ok(client.get(f"/api/questions/{v1['id']}", headers=bob))
+    assert seen["canDelete"] is None and seen["deleteBlockedReason"] is None

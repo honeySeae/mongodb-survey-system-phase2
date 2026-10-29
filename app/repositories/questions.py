@@ -78,6 +78,24 @@ def set_sharing(db: Database, question_id: ObjectId, sharing: dict) -> None:
     db[QUESTIONS].update_one({"_id": question_id}, {"$set": {"sharing": sharing}})
 
 
+def list_grouped(db: Database, query: dict, offset: int, limit: int) -> tuple[list[dict], int]:
+    """按题目（rootId）分组列出：每组取符合条件的版本中版本号最大的一个作为代表，附该组的版本列表；
+    组按代表版本的修改时间倒序。返回 ([{latest, versions: [{_id, version, ownerId}]}], 组数)。"""
+    pipeline = [
+        {"$match": query},
+        {"$sort": {"version": -1}},
+        {"$group": {"_id": "$rootId", "latest": {"$first": "$$ROOT"},
+                    "versions": {"$push": {"_id": "$_id", "version": "$version", "ownerId": "$ownerId"}}}},
+        {"$facet": {
+            "total": [{"$count": "n"}],
+            "page": [{"$sort": {"latest.updatedAt": -1, "_id": -1}}, {"$skip": offset}, {"$limit": limit}],
+        }},
+    ]
+    result = next(db[QUESTIONS].aggregate(pipeline))
+    total = result["total"][0]["n"] if result["total"] else 0
+    return result["page"], total
+
+
 def update_unlocked(db: Database, question_id: ObjectId, owner_id: ObjectId,
                     set_fields: dict, extra_filter: dict | None = None) -> dict | None:
     """仅当版本属于 owner 且未锁定时才更新（条件更新：与“加进问卷时加锁”同时发生时只有一个成功）。"""

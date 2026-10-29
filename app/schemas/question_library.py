@@ -59,6 +59,9 @@ class QuestionVersionOut(CamelModel):
     options: list[dict] | None = None
     validation: dict[str, Any]
     sharing: SharingOut | None = None  # 只对所有者返回
+    # 只在详情接口中对所有者返回：能否删除，不能时的原因（与删除接口的检查相同）
+    can_delete: bool | None = None
+    delete_blocked_reason: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -72,6 +75,26 @@ class SaveToLibraryResult(CamelModel):
     """存入题目库的结果：补上 source 的问卷和新生成的 v1。"""
     survey: SurveyOut
     question: QuestionVersionOut
+
+
+class GroupVersion(CamelModel):
+    id: str
+    version: int
+    owner: str
+
+
+class QuestionGroup(CamelModel):
+    """按题目分组的列表中的一项：latest 为该范围内版本号最大的版本，versions 为该范围内这道题的所有版本。"""
+    root_id: str
+    latest: QuestionVersionOut
+    versions: list[GroupVersion]
+
+
+class QuestionGroupList(CamelModel):
+    items: list[QuestionGroup]
+    total: int
+    offset: int
+    limit: int
 
 
 class QuestionVersionList(CamelModel):

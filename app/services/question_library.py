@@ -69,21 +69,31 @@ def _locked_error() -> Conflict:
     return Conflict("QUESTION_LOCKED", "这个版本已被问卷使用，不能直接修改；请基于它创建新版本")
 
 
+_SCOPES = {
+    "mine": lambda uid: {"ownerId": uid},
+    "shared": lambda uid: {"sharing.userIds": uid, "ownerId": {"$ne": uid}},
+    "public": lambda uid: {"sharing.public": True, "ownerId": {"$ne": uid}},
+    "all": access.direct_access_filter,
+}
+
+
 def list_questions(db: Database, user_id: ObjectId, scope: str, root_id: str | None,
                    offset: int, limit: int) -> tuple[list[dict], int]:
     """题目列表。scope：mine 我的 / shared 共享给我的 / public 公开的（不含自己的）/ all 全部可访问的。"""
-    query = {
-        "mine": {"ownerId": user_id},
-        "shared": {"sharing.userIds": user_id, "ownerId": {"$ne": user_id}},
-        "public": {"sharing.public": True, "ownerId": {"$ne": user_id}},
-        "all": access.direct_access_filter(user_id),
-    }[scope]
+    query = _SCOPES[scope](user_id)
     if root_id is not None:
         oid = parse_object_id(root_id)
         if oid is None:
             return [], 0
         query = {"$and": [query, {"rootId": oid}]}
     return questions_repo.list_matching(db, query, offset, limit)
+
+
+def list_question_groups(db: Database, user_id: ObjectId, scope: str, offset: int, limit: int
+                         ) -> tuple[list[dict], int]:
+    """按题目分组的列表（同一道题只出现一次，代表版本为该范围内版本号最大的）。范围同 list_questions。"""
+    query = _SCOPES[scope](user_id)
+    return questions_repo.list_grouped(db, query, offset, limit)
 
 
 def history(db: Database, user_id: ObjectId, question_id: str) -> tuple[dict, list[tuple[dict, bool]]]:
@@ -301,15 +311,23 @@ def resolve_sharing(db: Database, user_id: ObjectId, *, public: bool, usernames:
 
 
 # ---------- 删除 ----------
+def delete_block(db: Database, doc: dict) -> tuple[str, str] | None:
+    """版本不能删除的原因 (错误码, 说明)；可以删除时为 None。删除接口和详情接口共用，保证页面提示与实际一致。"""
+    if access.is_locked(doc):
+        return "QUESTION_LOCKED", "这个版本已被问卷使用，不能删除"
+    if questions_repo.has_children(db, doc["_id"]):
+        return "QUESTION_HAS_CHILDREN", "已有其他版本从这个版本派生或恢复，不能删除"
+    if questions_repo.in_any_bank(db, doc["_id"]):
+        return "QUESTION_IN_BANK", "这个版本在题库中，不能删除"
+    return None
+
+
 def delete_version(db: Database, user_id: ObjectId, question_id: str) -> None:
     """只有所有者能删；被问卷用过、有子版本、被任何题库引用的版本不能删（10.9）。"""
     doc = _get_owned(db, user_id, question_id, "删除")
-    if access.is_locked(doc):
-        raise Conflict("QUESTION_LOCKED", "这个版本已被问卷使用，不能删除")
-    if questions_repo.has_children(db, doc["_id"]):
-        raise Conflict("QUESTION_HAS_CHILDREN", "已有其他版本从这个版本派生或恢复，不能删除")
-    if questions_repo.in_any_bank(db, doc["_id"]):
-        raise Conflict("QUESTION_IN_BANK", "这个版本在题库中，不能删除")
+    block = delete_block(db, doc)
+    if block:
+        raise Conflict(*block)
     if not questions_repo.delete_unlocked(db, doc["_id"], user_id):
         # 检查之后被加进了问卷（已加锁）
         raise Conflict("QUESTION_LOCKED", "这个版本已被问卷使用，不能删除")

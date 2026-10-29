@@ -48,3 +48,57 @@ export function flattenTree(versions) {
 export function parseUsernames(text) {
   return text.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
 }
+
+// 校验字段的中文名（版本比较时显示）
+const VALIDATION_LABELS = {
+  minSelect: "至少选", maxSelect: "最多选", minLength: "最少字数", maxLength: "最多字数",
+  min: "最小值", max: "最大值", integerOnly: "只允许整数",
+};
+const showValue = (key, value) => {
+  if (value === undefined || value === null) return "不限";
+  if (key === "integerOnly") return value ? "是" : "否";
+  return String(value);
+};
+
+/**
+ * 比较一个版本和它的上一版本（parentId），返回改动说明列表，如
+ * ["题目：「你的性别」→「性别」", "选项「女」→「女性」", "新增选项「其他」", "最大值：150 → 120"]。
+ * 选项按 id 比较：id 相同、文字不同是“改了文字”（统计时仍合并为同一个选项）。
+ */
+export function diffVersions(prev, cur) {
+  const changes = [];
+  if (prev.title !== cur.title) changes.push(`题目：「${prev.title}」→「${cur.title}」`);
+
+  const before = prev.options || [];
+  const after = cur.options || [];
+  const beforeById = new Map(before.map((o) => [o.id, o]));
+  const afterIds = new Set(after.map((o) => o.id));
+  for (const o of after) {
+    const old = beforeById.get(o.id);
+    if (!old) changes.push(`新增选项「${o.text}」`);
+    else if (old.text !== o.text) changes.push(`选项「${old.text}」→「${o.text}」`);
+  }
+  for (const o of before) if (!afterIds.has(o.id)) changes.push(`删除选项「${o.text}」`);
+  const kept = after.filter((o) => beforeById.has(o.id)).map((o) => o.id);
+  const keptBefore = before.filter((o) => afterIds.has(o.id)).map((o) => o.id);
+  if (kept.join() !== keptBefore.join()) changes.push("调整了选项顺序");
+
+  const pv = prev.validation || {};
+  const cv = cur.validation || {};
+  for (const key of Object.keys(VALIDATION_LABELS)) {
+    const a = key === "integerOnly" ? Boolean(pv[key]) : pv[key];
+    const b = key === "integerOnly" ? Boolean(cv[key]) : cv[key];
+    if (a !== b) changes.push(`${VALIDATION_LABELS[key]}：${showValue(key, a)} → ${showValue(key, b)}`);
+  }
+  return changes;
+}
+
+/** 历史中一个版本的改动说明（一行文字）：与它的上一版本（parentId）比较。 */
+export function changeSummary(node, byId) {
+  if (!node.accessible) return "";
+  if (!node.parentId) return "最初的版本";
+  const parent = byId.get(node.parentId);
+  if (!parent || !parent.accessible) return "上一版本无权查看，无法比较";
+  const changes = diffVersions(parent.detail, node.detail);
+  return changes.length ? `与 v${parent.version} 相比：${changes.join("；")}` : `与 v${parent.version} 内容相同`;
+}

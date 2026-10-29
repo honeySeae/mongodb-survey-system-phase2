@@ -13,7 +13,7 @@ const EMPTY_TEXT = {
   public: "还没有别人公开的题目",
 };
 const SCOPE_NOTE = {
-  mine: "你创建的所有版本。被问卷使用过的版本不能直接修改，只能基于它创建新版本。",
+  mine: "你创建的题目，每道题显示最新的版本。被问卷使用过的版本不能直接修改，只能基于它创建新版本。",
   shared: "别人共享给你的题目：可以查看、用在自己的问卷中、基于它创建自己的新版本，不能直接修改。",
   public: "别人设为公开的题目：可以查看、用在自己的问卷中、基于它创建自己的新版本，不能直接修改。",
 };
@@ -74,11 +74,11 @@ async function load(reset) {
   }
   $("more-btn").disabled = true;
   try {
-    const page = await api("GET", withQuery("/api/questions", { scope, offset: loaded.length, limit: PAGE_SIZE }));
+    const page = await api("GET", withQuery("/api/questions/groups", { scope, offset: loaded.length, limit: PAGE_SIZE }));
     loaded = loaded.concat(page.items);
     total = page.total;
-    $("summary").textContent = `${SCOPE_NOTE[scope]}共 ${total} 个版本。`;
-    $("list").replaceChildren(...(loaded.length ? loaded.map(questionItem)
+    $("summary").textContent = `${SCOPE_NOTE[scope]}共 ${total} 道题。`;
+    $("list").replaceChildren(...(loaded.length ? loaded.map(groupItem)
       : [el("div", { class: "empty", text: EMPTY_TEXT[scope] })]));
     $("more-btn").hidden = loaded.length >= total;
   } catch (err) {
@@ -88,9 +88,11 @@ async function load(reset) {
   }
 }
 
-function questionItem(q) {
+/** 一道题一项：显示该范围内版本号最大的版本，以及这道题在该范围内的所有版本。 */
+function groupItem(group) {
+  const q = group.latest;
   const meta = [TYPE_LABELS[q.type] || q.type, `更新于 ${formatTime(q.updatedAt)}`];
-  if (!q.isMine) meta.unshift(`来自 ${q.owner}`);
+  if (!q.isMine) meta.unshift(`来自 ${[...new Set(group.versions.map((v) => v.owner))].join("、")}`);
   if (q.isMine) meta.push(sharingText(q.sharing));
   const summary = optionSummary(q);
   return el("div", { class: "survey-item lib-item" },
@@ -100,7 +102,10 @@ function questionItem(q) {
       q.locked ? el("span", { class: "badge closed", title: "已被问卷使用，只能基于它创建新版本", text: "已使用" }) : null),
     el("div", { class: "meta", text: meta.join(" · ") }),
     summary ? el("div", { class: "lib-options", text: summary }) : null,
-    el("div", { class: "actions mt-s" },
-      el("a", { class: "btn small ghost", href: `/questions/${q.id}`, text: "查看 / 版本历史" })),
+    el("div", { class: "lib-versions" },
+      el("span", { class: "muted", text: group.versions.length > 1 ? `共 ${group.versions.length} 个版本：` : "版本：" }),
+      group.versions.map((v) => el("a", {
+        class: `badge version${v.id === q.id ? " latest" : ""}`, href: `/questions/${v.id}`,
+        title: q.isMine ? `v${v.version}` : `v${v.version}（${v.owner}）`, text: `v${v.version}` }))),
   );
 }

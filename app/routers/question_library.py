@@ -11,7 +11,7 @@ from app.logic import question_access as access
 from app.logic import survey_state as state
 from app.repositories import users as users_repo
 from app.routers.surveys import survey_url
-from app.schemas.question_library import (CrossItem, CrossOptionCount, CrossOverall, CrossQuestionStats,
+from app.schemas.question_library import (GroupVersion, QuestionGroup, QuestionGroupList, CrossItem, CrossOptionCount, CrossOverall, CrossQuestionStats,
                                           CrossSurveyStats, MergedOptionCount, HistoryNode, QuestionHistory, QuestionVersionCreate,
                                           QuestionVersionEdit, QuestionVersionList, QuestionVersionOut,
                                           QuestionUsage, RestoreRequest, SharingOut, SharingResult, SharingUpdate,
@@ -88,9 +88,32 @@ def list_versions(scope: str = Query("mine", pattern="^(mine|shared|public|all)$
                                total=total, offset=offset, limit=limit)
 
 
+@router.get("/groups", response_model=QuestionGroupList)
+def list_groups(scope: str = Query("mine", pattern="^(mine|shared|public|all)$",
+                                   description="mine 我的 / shared 共享给我的 / public 公开的 / all 全部可访问的"),
+                offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=LIST_LIMIT_MAX),
+                user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
+    """按题目分组的列表：同一道题只出现一次，显示该范围内版本号最大的版本和版本列表（最近修改的在前）。"""
+    groups, total = service.list_question_groups(db, user["_id"], scope, offset, limit)
+    owner_ids = [v["ownerId"] for g in groups for v in g["versions"]]
+    names = users_repo.usernames_by_ids(db, owner_ids + _user_ids_to_name([g["latest"] for g in groups], user["_id"]))
+    items = [QuestionGroup(
+        root_id=str(g["_id"]), latest=version_out(g["latest"], user["_id"], names),
+        versions=[GroupVersion(id=str(v["_id"]), version=v["version"], owner=names.get(v["ownerId"], ""))
+                  for v in sorted(g["versions"], key=lambda v: v["version"])]) for g in groups]
+    return QuestionGroupList(items=items, total=total, offset=offset, limit=limit)
+
+
 @router.get("/{question_id}", response_model=QuestionVersionOut)
 def detail(question_id: str, user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
-    return version_detail(db, service.get_accessible(db, user["_id"], question_id), user)
+    """版本详情。对所有者另外返回能否删除及原因（页面据此把删除按钮变灰并说明）。"""
+    doc = service.get_accessible(db, user["_id"], question_id)
+    out = version_detail(db, doc, user)
+    if out.is_mine:
+        block = service.delete_block(db, doc)
+        out.can_delete = block is None
+        out.delete_blocked_reason = block[1] if block else None
+    return out
 
 
 @router.put("/{question_id}", response_model=QuestionVersionOut)

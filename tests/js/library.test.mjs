@@ -1,6 +1,6 @@
 // 第二阶段题目库页面的纯函数测试（不需要浏览器）。由 tests/test_frontend_js.py 调用。
 import assert from "node:assert/strict";
-import { flattenTree, optionSummary, parseUsernames, sharingText } from "../../static/js/library-common.js";
+import { changeSummary, diffVersions, flattenTree, optionSummary, parseUsernames, sharingText } from "../../static/js/library-common.js";
 import { buildBody, toValidationValue } from "../../static/js/library-editor.js";
 
 // 版本树：按 parentId 缩进；同层按版本号；父版本不可见时作为根
@@ -37,5 +37,37 @@ assert.deepEqual(buildBody({ type: "number", title: "年龄", validation: { min:
                  { type: "number", title: "年龄", validation: { min: 0, integerOnly: true } });
 assert.deepEqual(buildBody({ type: "text", title: "建议", validation: { maxLength: "100", min: "5" }, integerOnly: true, options: [{ text: "x" }] }),
                  { type: "text", title: "建议", validation: { maxLength: 100 } });   // 不属于该题型的字段和选项不提交
+
+// 版本比较：题目、选项（按 id：改文字、新增、删除、调整顺序）、校验规则
+const base = { title: "你的性别", options: [{ id: "a", text: "男" }, { id: "b", text: "女" }, { id: "c", text: "保密" }],
+               validation: { min: 0, max: 150, integerOnly: true } };
+assert.deepEqual(diffVersions(base, base), []);
+assert.deepEqual(diffVersions(base, {
+  title: "性别", options: [{ id: "b", text: "女性" }, { id: "a", text: "男" }, { id: "d", text: "其他" }],
+  validation: { min: 0, max: 120 } }), [
+  "题目：「你的性别」→「性别」",
+  "选项「女」→「女性」",
+  "新增选项「其他」",
+  "删除选项「保密」",
+  "调整了选项顺序",
+  "最大值：150 → 120",
+  "只允许整数：是 → 否",
+]);
+assert.deepEqual(diffVersions({ title: "建议", validation: {} }, { title: "建议", validation: { maxLength: 100 } }),
+                 ["最多字数：不限 → 100"]);
+
+// 历史中的改动说明：与上一版本比较；最初版本、上一版本无权查看、内容相同
+const node = (id, version, parentId, detail, accessible = true) => ({ id, version, parentId, detail, accessible });
+const n1 = node("1", 1, null, base);
+const n2 = node("2", 2, "1", { ...base, title: "性别" });
+const n3 = node("3", 3, "2", { ...base, title: "性别" });
+const hidden = node("4", 4, "1", null, false);
+const n5 = node("5", 5, "4", base);
+const byId = new Map([n1, n2, n3, hidden, n5].map((n) => [n.id, n]));
+assert.equal(changeSummary(n1, byId), "最初的版本");
+assert.equal(changeSummary(n2, byId), "与 v1 相比：题目：「你的性别」→「性别」");
+assert.equal(changeSummary(n3, byId), "与 v2 内容相同");
+assert.equal(changeSummary(n5, byId), "上一版本无权查看，无法比较");
+assert.equal(changeSummary(hidden, byId), "");
 
 console.log("ok");
