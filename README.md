@@ -174,6 +174,8 @@ docs/           设计文档、API 说明、部署、测试用例、兼容性验
 - `source` 保留了与原题的联系，用于“被哪些问卷使用”和跨问卷统计；版本被问卷用过就锁定，保证副本与来源版本内容一致；
 - **旧数据不迁移**：没有 `source` 的题就是问卷里直接建的题，一切照旧。
 
+第二阶段的新结构为什么适合 MongoDB、为什么不用关系表（含与关系表的逐项对比），见[设计文档 10.12](docs/DATABASE_DESIGN.md)。
+
 **为什么每个版本一个文档**：版本要能单独被问卷引用、单独共享、单独锁定，并且同一道题的不同版本可以属于不同的人（别人基于共享的题创建的版本属于别人）。版本之间用 `rootId`（同一道题）和 `parentId`（从哪个版本改来）连成一棵树；选项 id 跨版本保持不变，跨问卷统计因此可以直接按选项 id 合并。
 
 **第二阶段的索引**：`questions {rootId, version}` 唯一（版本号不重复、取最大版本号）、`{ownerId, updatedAt}`、`sharing.userIds`、`sharing.public`（部分索引）、`parentId`、`restoredFrom`；`questionBanks {ownerId, updatedAt}`、`sharing.userIds`、`sharing.public`、`items.questionId`；`surveys` 新增 `questions.source.questionId`、`{questions.source.rootId, ownerId}`（被哪些问卷使用、跨问卷统计）。
