@@ -6,7 +6,8 @@ import { createDeadlinePicker } from "./deadline.js";
 import { bindOptionHighlight, el, errorNotice, linkBox, pathSegment, POLICY_LABELS, renderTopbar, statusBadge, toast } from "./layout.js";
 import { createQuestionEditor } from "./question-editor.js";
 import { createQuestionView, TYPE_LABELS } from "./render.js";
-import { createLibraryPicker, createSwitchPanel, sourceBadge } from "./edit-library.js";
+import { createSwitchPanel, sourceBadge } from "./edit-library.js";
+import { createLibraryPicker } from "./library-picker.js";
 
 const $ = (id) => document.getElementById(id);
 const surveyId = pathSegment(1);
@@ -247,7 +248,14 @@ function openPanel(key, instance) {
 
 function openLibraryPicker() {
   openPanel("library", createLibraryPicker({
-    survey,
+    title: "从题目库添加",
+    intro: "添加的是题目的副本：题目库中的题以后修改（生成新版本）不会影响这份问卷。是否必答、跳转规则在问卷中设置。",
+    usedRoots: new Set(survey.questions.filter((q) => q.source).map((q) => q.source.rootId)),
+    usedText: "已在问卷中",
+    usedTitle: "同一道题在一份问卷中只能出现一次；要用其他版本请对问卷中的这道题“换版本”",
+    addText: "添加",
+    showRequired: true,
+    showBanks: true,
     async onAdd(questionId, required) {
       try {
         survey = await api("POST", questionsPath("/from-library"), { questionId, required });

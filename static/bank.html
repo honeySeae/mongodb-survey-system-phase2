@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>题库 · 问卷</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div class="paper">
+      <div class="paper-head">
+        <div class="head-row">
+          <div>
+            <h1 id="title">加载中…</h1>
+            <div class="desc" id="desc"></div>
+            <div class="meta" id="meta"></div>
+          </div>
+          <div class="actions" id="head-actions"><a class="btn small ghost" href="/banks">返回题库列表</a></div>
+        </div>
+      </div>
+      <div class="paper-body msg-slot" id="message"></div>
+
+      <section id="content" hidden>
+        <!-- 修改名称和说明（只有创建者） -->
+        <form id="edit-form" class="new-form" hidden novalidate>
+          <div id="edit-message"></div>
+          <div class="field">
+            <label for="edit-name">题库名称</label>
+            <input class="input" id="edit-name" maxlength="100">
+          </div>
+          <div class="field">
+            <label for="edit-description">说明（选填）</label>
+            <textarea class="input" id="edit-description" rows="2" maxlength="1000"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn small" type="submit" id="edit-save">保存</button>
+            <button class="btn link muted" type="button" id="edit-cancel">取消</button>
+          </div>
+        </form>
+
+        <div class="paper-body"><div id="role-note"></div></div>
+        <div id="items"></div>
+        <div class="add-bar" id="add-bar" hidden>
+          <button class="btn small ghost" type="button" id="add-btn">＋ 加入题目</button>
+          <span class="muted">题库中的每一项是一道题的一个固定版本；有新版本时会提示，由你决定是否更换</span>
+        </div>
+
+        <div class="paper-section" id="sharing-section" hidden>
+          <h2 class="section-title">共享设置</h2>
+          <div class="muted">共享后，别人可以使用题库中的题（在问卷编辑页“从题目库添加 → 题库”中选择），也可以基于它们创建自己的新版本；只有你能修改题库。</div>
+          <form id="sharing-form" class="mt-s" novalidate>
+            <div id="sharing-message"></div>
+            <div class="field" id="public-group">
+              <label class="option checkbox">
+                <input type="checkbox" id="sharing-public"><span class="mark"></span>
+                <span>公开 <span class="muted">所有登录用户都可以使用</span></span>
+              </label>
+            </div>
+            <div class="field">
+              <label for="sharing-users">共享给指定用户</label>
+              <textarea class="input" id="sharing-users" rows="2" placeholder="填写用户名，多个用逗号或换行分隔"></textarea>
+            </div>
+            <button class="btn small" type="submit" id="sharing-save">保存共享设置</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/static/js/bank.js"></script>
+</body>
+</html>

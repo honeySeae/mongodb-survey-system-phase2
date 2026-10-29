@@ -20,6 +20,7 @@ const SCOPE_NOTE = {
 
 let scope = "mine";
 let loaded = [];
+let requestNo = 0;   // 切换标签时，只采用最后一次请求的结果（较早的请求可能更晚返回）
 let total = 0;
 
 if (requireLogin()) {
@@ -73,8 +74,10 @@ async function load(reset) {
     $("list").replaceChildren(el("div", { class: "empty", text: "加载中…" }));
   }
   $("more-btn").disabled = true;
+  const no = ++requestNo;
   try {
     const page = await api("GET", withQuery("/api/questions/groups", { scope, offset: loaded.length, limit: PAGE_SIZE }));
+    if (no !== requestNo) return;
     loaded = loaded.concat(page.items);
     total = page.total;
     $("summary").textContent = `${SCOPE_NOTE[scope]}共 ${total} 道题。`;
@@ -82,7 +85,7 @@ async function load(reset) {
       : [el("div", { class: "empty", text: EMPTY_TEXT[scope] })]));
     $("more-btn").hidden = loaded.length >= total;
   } catch (err) {
-    $("list").replaceChildren(el("div", { class: "paper-body" }, errorNotice(err)));
+    if (no === requestNo) $("list").replaceChildren(el("div", { class: "paper-body" }, errorNotice(err)));
   } finally {
     $("more-btn").disabled = false;
   }

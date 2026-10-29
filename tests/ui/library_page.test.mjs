@@ -15,7 +15,7 @@ await scenario("题目库页", async (t) => {
   // ---------- 新建题目 ----------
   await b.goto(`${t.base}/questions`);
   await b.waitFor(`document.querySelector("#list .empty")?.textContent.includes("还没有题目")`, "空列表提示");
-  assert.deepEqual(await t.texts(".topbar nav a"), ["我的问卷", "题目库"]);
+  assert.deepEqual(await t.texts(".topbar nav a"), ["我的问卷", "题目库", "题库"]);
   assert.equal(await t.text(".topbar nav a.active"), "题目库");
   t.step("顶部导航新增“题目库”；空列表时有提示");
   await t.shot("空的题目库");

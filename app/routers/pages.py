@@ -55,6 +55,16 @@ def question_page(question_id: str):
     return _page("question.html")
 
 
+@router.get("/banks")
+def banks_page():
+    return _page("banks.html")
+
+
+@router.get("/banks/{bank_id}")
+def bank_page(bank_id: str):
+    return _page("bank.html")
+
+
 @router.get("/survey/{short_code}")
 def fill_page(short_code: str):
     """问卷分发链接：<PUBLIC_BASE_URL>/survey/<shortCode>。"""

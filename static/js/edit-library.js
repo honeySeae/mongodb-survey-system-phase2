@@ -1,98 +1,13 @@
-// 问卷编辑页的第二阶段功能：从题目库添加、换版本、题目来源标签。
-// 两个面板都像题目编辑器一样就地展开在题目列表中（接口：{ element, isDirty, focus }），由 edit.js 管理。
-import { api, withQuery } from "./api.js";
+// 问卷编辑页的第二阶段功能：换版本、题目来源标签（“从题目库添加”的面板见 library-picker.js）。
+// 面板像题目编辑器一样就地展开在题目列表中（接口：{ element, isDirty, focus }），由 edit.js 管理。
+import { api } from "./api.js";
 import { el, errorNotice } from "./layout.js";
-import { diffVersions, optionSummary, versionBadge } from "./library-common.js";
-import { TYPE_LABELS } from "./render.js";
-
-const PAGE_SIZE = 10;
-const SCOPES = [["mine", "我的题目"], ["shared", "共享给我的"], ["public", "公开的"]];
+import { diffVersions, versionBadge } from "./library-common.js";
 
 /** 题目来源标签：“题目库 v2”，点击在新标签页打开该版本。 */
 export function sourceBadge(q) {
   return el("a", { class: "badge version source", href: `/questions/${q.source.questionId}`, target: "_blank",
                    title: "这道题来自题目库，点击查看该版本", text: `题目库 v${q.source.version}` });
-}
-
-/**
- * 从题目库添加的面板。
- * @param {object} opts  survey（当前问卷）；onAdd(questionId, required) 返回 Promise；onCancel()
- */
-export function createLibraryPicker(opts) {
-  const usedRoots = new Set(opts.survey.questions.filter((q) => q.source).map((q) => q.source.rootId));
-  let scope = "mine";
-  let loaded = [];
-  let total = 0;
-
-  const message = el("div");
-  const list = el("div", { class: "pick-list" });
-  const more = el("button", { class: "btn small ghost", type: "button", text: "加载更多", hidden: true,
-                              onclick: () => load(false) });
-  const tabs = el("div", { class: "seg", role: "tablist" }, SCOPES.map(([value, label]) =>
-    el("button", { type: "button", class: value === scope ? "active" : null, dataset: { scope: value }, text: label,
-                   onclick: (e) => {
-                     if (scope === value) return;
-                     scope = value;
-                     tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === e.target));
-                     load(true);
-                   } })));
-  const element = el("div", { class: "question editing library-picker" },
-    el("div", { class: "editor-head", text: "从题目库添加" }),
-    el("div", { class: "muted", text: "添加的是题目的副本：题目库中的题以后修改（生成新版本）不会影响这份问卷。是否必答、跳转规则在问卷中设置。" }),
-    tabs, message, list,
-    el("div", { class: "actions mt" }, more,
-      el("button", { class: "btn link muted", type: "button", text: "关闭", onclick: () => opts.onCancel() })));
-
-  async function load(reset) {
-    if (reset) { loaded = []; list.replaceChildren(el("div", { class: "muted", text: "加载中…" })); }
-    message.replaceChildren();
-    try {
-      const page = await api("GET", withQuery("/api/questions/groups", { scope, offset: loaded.length, limit: PAGE_SIZE }));
-      loaded = loaded.concat(page.items);
-      total = page.total;
-      list.replaceChildren(...(loaded.length ? loaded.map(row)
-        : [el("div", { class: "muted", text: scope === "mine" ? "题目库中还没有你的题目" : "没有可用的题目" })]));
-      more.hidden = loaded.length >= total;
-    } catch (err) {
-      list.replaceChildren(errorNotice(err));
-    }
-  }
-
-  function row(group) {
-    const q = group.latest;
-    const used = usedRoots.has(group.rootId);
-    // 版本选择：默认版本号最大的；各版本可点“查看”在新标签页打开
-    const versionSelect = el("select", { "aria-label": "选择版本", disabled: used },
-      [...group.versions].reverse().map((v) => el("option", { value: v.id, selected: v.id === q.id,
-        text: `v${v.version}${v.id === q.id ? "（最新）" : ""}${q.isMine ? "" : ` · ${v.owner}`}` })));
-    const required = el("input", { type: "checkbox", checked: true, disabled: used });
-    const addBtn = el("button", { class: "btn small", type: "button", text: used ? "已在问卷中" : "添加", disabled: used,
-      title: used ? "同一道题在一份问卷中只能出现一次；要用其他版本请对问卷中的这道题“换版本”" : null,
-      onclick: async () => {
-        addBtn.disabled = true;
-        try {
-          await opts.onAdd(versionSelect.value, required.checked);
-        } catch (err) {
-          message.replaceChildren(errorNotice(err));
-          addBtn.disabled = false;
-        }
-      } });
-    const meta = [TYPE_LABELS[q.type] || q.type];
-    if (!q.isMine) meta.push(`来自 ${q.owner}`);
-    const summary = optionSummary(q);
-    return el("div", { class: `pick-row${used ? " used" : ""}` },
-      el("div", { class: "pick-main" },
-        el("div", { class: "pick-title" }, el("span", { text: q.title }), versionBadge(q),
-          el("a", { href: `/questions/${q.id}`, target: "_blank", class: "muted", text: "查看" })),
-        el("div", { class: "muted", text: [meta.join(" · "), summary].filter(Boolean).join(" · ") })),
-      el("div", { class: "pick-controls" },
-        group.versions.length > 1 ? versionSelect : null,
-        el("label", { class: "check" }, required, "必答"),
-        addBtn));
-  }
-
-  load(true);
-  return { element, isDirty: () => false, focus: () => tabs.querySelector("button")?.focus() };
 }
 
 /** 问卷中一道来自题目库的题当前的内容（不含是否必答），用于和其他版本比较。 */

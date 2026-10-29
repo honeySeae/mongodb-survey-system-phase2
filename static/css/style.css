@@ -382,6 +382,11 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .pick-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
 .pick-title a.muted { font-weight: 400; }
 .pick-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pick-bank-items { margin: 0 0 6px 18px; border-left: 2px solid var(--primary-line); padding-left: 10px; }
+/* 题库详情 */
+.bank-item h3 .q-number { min-width: 1.6em; }
+.bank-item.unavailable h3 { color: var(--ink-faint); }
+.bank-notice { margin: 6px 0 0; display: inline-block; }
 
 /* ---------- 手机 ---------- */
 @media (max-width: 600px) {

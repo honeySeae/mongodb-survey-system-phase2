@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>题库 · 问卷</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div class="paper">
+      <div class="paper-head">
+        <div class="head-row">
+          <div>
+            <h1>题库</h1>
+            <div class="desc">把常用题目整理成题库，做问卷时在“从题目库添加 → 题库”中直接选题；题库可以共享给同事</div>
+          </div>
+          <button class="btn" type="button" id="new-btn">＋ 新建题库</button>
+        </div>
+      </div>
+
+      <form id="new-form" class="new-form" hidden novalidate>
+        <div id="new-message"></div>
+        <div class="field">
+          <label for="name">题库名称</label>
+          <input class="input" id="name" maxlength="100" placeholder="如：学生基本信息">
+        </div>
+        <div class="field">
+          <label for="description">说明（选填）</label>
+          <textarea class="input" id="description" rows="2" maxlength="1000"></textarea>
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit" id="create-btn">创建并加入题目</button>
+          <button class="btn link muted" type="button" id="cancel-btn">取消</button>
+        </div>
+      </form>
+
+      <div class="tabs" role="tablist" id="tabs">
+        <button type="button" role="tab" data-scope="mine" class="active">我的题库</button>
+        <button type="button" role="tab" data-scope="shared">共享给我的</button>
+        <button type="button" role="tab" data-scope="public">公开的</button>
+      </div>
+      <div class="paper-body"><div class="muted" id="summary"></div></div>
+      <div id="list"><div class="empty">加载中…</div></div>
+      <div class="load-more"><button class="btn small ghost" type="button" id="more-btn" hidden>加载更多</button></div>
+    </div>
+  </main>
+  <script type="module" src="/static/js/banks.js"></script>
+</body>
+</html>
