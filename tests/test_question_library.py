@@ -201,6 +201,27 @@ def test_others_cannot_see_private_question(client, alice, bob):
     assert client.get("/api/questions/not-an-id", headers=bob).status_code == 404
 
 
+def test_no_access_looks_like_not_found(client, alice, bob):
+    """完全无权访问的题目：查看、修改、删除、恢复与不存在的题目返回完全相同的 404（不暴露是否存在）。"""
+    v1 = create(client, alice)
+    missing = str(ObjectId())
+    for qid in (v1["id"], missing):
+        responses = [
+            client.get(f"/api/questions/{qid}", headers=bob),
+            client.put(f"/api/questions/{qid}", json=AGE, headers=bob),
+            client.delete(f"/api/questions/{qid}", headers=bob),
+            client.post(f"/api/questions/{qid}/restore", headers=bob),
+        ]
+        assert [(r.status_code, r.json()) for r in responses] == [
+            (404, {"code": "QUESTION_NOT_FOUND", "message": "题目不存在"})] * 4
+    # 恢复时把别人的私有版本指定为父版本，同样是 404
+    mine = create(client, bob)
+    r = client.post(f"/api/questions/{mine['id']}/restore", json={"parentId": v1["id"]}, headers=bob)
+    assert r.status_code == 404
+    # alice 的题目没有被改动
+    assert ok(client.get(f"/api/questions/{v1['id']}", headers=alice))["title"] == AGE["title"]
+
+
 def test_shared_user_can_use_and_derive_but_not_modify(client, alice, bob, db):
     v1 = create(client, alice)
     share_with(db, v1["id"], user_id(db, "bob"))
