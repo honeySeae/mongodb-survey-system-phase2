@@ -5,7 +5,8 @@
 2. 版本公开（sharing.public）；
 3. 自己在 sharing.userIds 中；
 4. 版本在一个自己可访问的题库中，且题库创建者按 1~3 现在仍能访问它
-   （第 4 条在题库那一步实现：由调用方查出“通过题库获得访问权的版本 id”传入 bank_granted）。
+   （第 4 条需要查询题库：由 app/services/question_library.py 的 bank_granted 查出
+   “通过题库获得访问权的版本 id”，传入 can_access 的 bank_granted 参数）。
 
 只有所有者能做：直接修改未锁定的版本、修改共享设置、删除版本。
 不可访问与不存在一样返回 404；可访问但不是所有者却要修改返回 403。

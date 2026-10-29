@@ -18,6 +18,7 @@ from pymongo.errors import DuplicateKeyError
 from app.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from app.logic import question_access as access
 from app.logic.question_versions import build_content
+from app.repositories import banks as banks_repo
 from app.repositories import questions as questions_repo
 from app.repositories import users as users_repo
 from app.utils import now_utc, parse_object_id, to_mongo_time
@@ -31,11 +32,27 @@ def _not_found() -> NotFound:
 
 
 # ---------- 查询与权限 ----------
+def bank_granted(db: Database, user_id: ObjectId, docs: list[dict]) -> set[ObjectId]:
+    """10.9 第 4 条：这些版本中，通过自己可访问的题库获得访问权的版本 id。
+
+    条件：版本在一个自己可访问的题库中，且题库创建者**现在**仍能直接访问它（第 1~3 条）。
+    只对不能直接访问的版本查询题库。
+    """
+    pending = {d["_id"]: d for d in docs if not access.is_directly_accessible(d, user_id)}
+    granted: set[ObjectId] = set()
+    for bank in banks_repo.accessible_banks_containing(db, user_id, list(pending)):
+        for item in bank["items"]:
+            doc = pending.get(item["questionId"])
+            if doc is not None and access.is_directly_accessible(doc, bank["ownerId"]):
+                granted.add(doc["_id"])
+    return granted
+
+
 def get_accessible(db: Database, user_id: ObjectId, question_id: str) -> dict:
     """取一个自己可访问的版本；id 格式不对、不存在、无权访问，都返回 404。"""
     oid = parse_object_id(question_id)
     doc = questions_repo.find(db, oid) if oid else None
-    if doc is None or not access.can_access(doc, user_id):
+    if doc is None or not access.can_access(doc, user_id, bank_granted(db, user_id, [doc])):
         raise _not_found()
     return doc
 
@@ -73,7 +90,8 @@ def history(db: Database, user_id: ObjectId, question_id: str) -> tuple[dict, li
     """一道题的全部版本（按版本号排序），每项附带自己能否访问。返回 (被查询的版本, [(版本, 可访问)])。"""
     doc = get_accessible(db, user_id, question_id)
     versions = questions_repo.list_versions(db, doc["rootId"])
-    return doc, [(v, access.can_access(v, user_id)) for v in versions]
+    granted = bank_granted(db, user_id, versions)
+    return doc, [(v, access.can_access(v, user_id, granted)) for v in versions]
 
 
 # ---------- 新建版本的公共部分 ----------
@@ -257,6 +275,15 @@ def set_sharing(db: Database, user_id: ObjectId, question_id: str, *, public: bo
     取消共享不影响已经复制进别人问卷的题（问卷里是副本）。
     """
     doc = _get_owned(db, user_id, question_id, "修改共享设置")
+    sharing = resolve_sharing(db, user_id, public=public, usernames=usernames)
+    count = questions_repo.set_sharing_for_owner_in_root(db, doc["rootId"], user_id, sharing)
+    doc["sharing"] = sharing
+    return doc, count
+
+
+def resolve_sharing(db: Database, user_id: ObjectId, *, public: bool, usernames: list[str]) -> dict:
+    """把共享请求转换为存库的 sharing（题目、题库共用）：用户名去首尾空格、去重；
+    不存在的用户、共享给自己、超过上限时报错。"""
     names = list(dict.fromkeys(n.strip() for n in usernames))  # 去掉首尾空格、去重、保持顺序
     if len(names) > SHARE_USERS_MAX:
         raise ValidationFailed([{"field": "usernames", "message": f"最多共享给 {SHARE_USERS_MAX} 个用户"}],
@@ -270,10 +297,7 @@ def set_sharing(db: Database, user_id: ObjectId, question_id: str, *, public: bo
             errors.append({"field": f"usernames[{i}]", "message": "不能共享给自己"})
     if errors:
         raise ValidationFailed(errors, "共享设置不合法")
-    sharing = {"public": public, "userIds": [found[n] for n in names]}
-    count = questions_repo.set_sharing_for_owner_in_root(db, doc["rootId"], user_id, sharing)
-    doc["sharing"] = sharing
-    return doc, count
+    return {"public": public, "userIds": [found[n] for n in names]}
 
 
 # ---------- 删除 ----------

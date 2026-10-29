@@ -16,6 +16,12 @@ def find(db: Database, question_id: ObjectId) -> dict | None:
     return db[QUESTIONS].find_one({"_id": question_id})
 
 
+def find_many(db: Database, question_ids: list[ObjectId]) -> list[dict]:
+    if not question_ids:
+        return []
+    return list(db[QUESTIONS].find({"_id": {"$in": question_ids}}))
+
+
 def max_version(db: Database, root_id: ObjectId) -> int:
     """这道题现有的最大版本号（命中 rootId_version_unique 索引）。"""
     doc = db[QUESTIONS].find_one({"rootId": root_id}, {"version": 1}, sort=[("version", DESCENDING)])

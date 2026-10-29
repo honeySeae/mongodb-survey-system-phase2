@@ -33,7 +33,7 @@ def _user_ids_to_name(docs: list[dict], user_id) -> list:
     return ids
 
 
-def _names(db: Database, docs: list[dict], user_id) -> dict:
+def names_for(db: Database, docs: list[dict], user_id) -> dict:
     return users_repo.usernames_by_ids(db, _user_ids_to_name(docs, user_id))
 
 
@@ -52,7 +52,7 @@ def version_out(doc: dict, user_id, usernames: dict) -> QuestionVersionOut:
 
 
 def version_detail(db: Database, doc: dict, user: dict) -> QuestionVersionOut:
-    return version_out(doc, user["_id"], _names(db, [doc], user["_id"]))
+    return version_out(doc, user["_id"], names_for(db, [doc], user["_id"]))
 
 
 def _options(body) -> list[dict] | None:
@@ -76,7 +76,7 @@ def list_versions(scope: str = Query("mine", pattern="^(mine|shared|public|all)$
                   user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
     """题目版本列表（最近修改的在前）。"""
     docs, total = service.list_questions(db, user["_id"], scope, root_id, offset, limit)
-    names = _names(db, docs, user["_id"])
+    names = names_for(db, docs, user["_id"])
     return QuestionVersionList(items=[version_out(d, user["_id"], names) for d in docs],
                                total=total, offset=offset, limit=limit)
 
@@ -135,7 +135,7 @@ def get_history(question_id: str, user: dict = Depends(get_current_user),
                 db: Database = Depends(get_database)):
     """这道题的全部版本（按版本号排序）；无权查看的版本只显示版本号和父子关系。"""
     doc, versions = service.history(db, user["_id"], question_id)
-    names = _names(db, [v for v, ok in versions if ok], user["_id"])
+    names = names_for(db, [v for v, ok in versions if ok], user["_id"])
     nodes = [HistoryNode(id=str(v["_id"]), version=v["version"], parent_id=_str(v.get("parentId")),
                          restored_from=_str(v.get("restoredFrom")), accessible=ok,
                          detail=version_out(v, user["_id"], names) if ok else None)
