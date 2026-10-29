@@ -102,3 +102,24 @@ export function changeSummary(node, byId) {
   const changes = diffVersions(parent.detail, node.detail);
   return changes.length ? `与 v${parent.version} 相比：${changes.join("；")}` : `与 v${parent.version} 内容相同`;
 }
+
+// ---------- 跨问卷统计（第二阶段） ----------
+/** 百分比，保留一位小数（与第一阶段统计页相同：选项次数 ÷ 答卷数）。 */
+export function percent(count, total) {
+  return total ? Math.round((count / total) * 1000) / 10 : 0;
+}
+
+/** 平均值等数字的显示：整数原样，小数保留两位；没有值时为“—”。 */
+export function formatNumber(x) {
+  if (x === null || x === undefined) return "—";
+  return Number.isInteger(x) ? String(x) : x.toFixed(2);
+}
+
+/**
+ * 筛选条件：全部选中（或一个都没选）时不筛选，返回 null；否则返回选中的 id 列表。
+ * 一个都没选时由页面提示“至少选择一项”，不发请求。
+ */
+export function filterParam(selected, all) {
+  if (!selected.length || selected.length === all.length) return null;
+  return selected;
+}

@@ -178,6 +178,7 @@ class CrossSurveyStats(CamelModel):
     survey_id: str
     title: str
     status: str
+    is_expired: bool
     url: str
     submission_policy: str
     survey_question_id: str

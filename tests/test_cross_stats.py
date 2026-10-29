@@ -324,3 +324,16 @@ def test_survey_filter_validation(client, alice, bob, gender):
         r = cross(client, alice, v1, surveyId=[gender["s1"]["id"], bad])
         assert r.status_code == 422, bad
         assert r.json()["errors"][0]["field"] == "surveyId[1]"
+
+
+def test_survey_entries_report_expired(client, alice, db):
+    """各问卷的结果带 isExpired（页面据此显示“已截止”）。"""
+    from datetime import timedelta
+    from app.db import SURVEYS
+    from app.utils import now_utc
+    v1 = create(client, alice, GENDER)
+    s1, _ = publish_with(client, alice, v1["id"], "已截止的问卷")
+    publish_with(client, alice, v1["id"], "收集中的问卷")
+    db[SURVEYS].update_one({"_id": ObjectId(s1["id"])}, {"$set": {"settings.deadline": now_utc() - timedelta(days=1)}})
+    r = ok(cross(client, alice, v1["id"]))
+    assert {s["title"]: s["isExpired"] for s in r["surveys"]} == {"已截止的问卷": True, "收集中的问卷": False}

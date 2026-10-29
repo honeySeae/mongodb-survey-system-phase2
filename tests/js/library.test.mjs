@@ -1,6 +1,7 @@
 // 第二阶段题目库页面的纯函数测试（不需要浏览器）。由 tests/test_frontend_js.py 调用。
 import assert from "node:assert/strict";
-import { changeSummary, diffVersions, flattenTree, optionSummary, parseUsernames, sharingText } from "../../static/js/library-common.js";
+import { changeSummary, diffVersions, filterParam, flattenTree, formatNumber, optionSummary, parseUsernames, percent,
+         sharingText } from "../../static/js/library-common.js";
 import { buildBody, toValidationValue } from "../../static/js/library-editor.js";
 
 // 版本树：按 parentId 缩进；同层按版本号；父版本不可见时作为根
@@ -69,5 +70,15 @@ assert.equal(changeSummary(n2, byId), "与 v1 相比：题目：「你的性别�
 assert.equal(changeSummary(n3, byId), "与 v2 内容相同");
 assert.equal(changeSummary(n5, byId), "上一版本无权查看，无法比较");
 assert.equal(changeSummary(hidden, byId), "");
+
+// 跨问卷统计：百分比、数字显示、筛选条件（全部选中或都没选时不筛选）
+assert.equal(percent(1, 3), 33.3);
+assert.equal(percent(0, 0), 0);
+assert.equal(formatNumber(30), "30");
+assert.equal(formatNumber(3.3333), "3.33");
+assert.equal(formatNumber(null), "—");
+assert.equal(filterParam(["a", "b"], ["a", "b"]), null);
+assert.equal(filterParam([], ["a", "b"]), null);
+assert.deepEqual(filterParam(["a"], ["a", "b"]), ["a"]);
 
 console.log("ok");

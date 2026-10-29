@@ -368,6 +368,16 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   outline: 2px solid var(--primary-line); outline-offset: 2px;
 }
 
+/* 单题跨问卷统计（第二阶段） */
+.cross-filters { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.cross-filter { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.cross-filter .field-label { margin: 0; min-width: 2.5em; }
+.cross-survey { padding-left: 0; padding-right: 0; }   /* 已在 paper-section 的内边距中，不再缩进 */
+.cross-survey .q-title { align-items: center; flex-wrap: wrap; gap: 8px; }
+.cross-survey .q-title a { color: var(--ink); }
+.cross-survey .q-hint, .cross-survey .q-body { margin-left: 0; }
+.old-option { margin-left: 6px; font-size: 11px; }
+
 /* 问卷编辑页：从题目库添加、换版本（第二阶段） */
 .q-title .badge.source { margin-left: 6px; font-family: var(--font-sans); font-weight: 400; align-self: center; }
 .q-title .badge.source:hover { text-decoration: none; background: var(--primary-tint); }

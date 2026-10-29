@@ -80,8 +80,8 @@ def find_for_cross_stats(db: Database, owner_id: ObjectId, root_id: ObjectId,
     """第二阶段跨问卷统计：自己的、指定状态的、使用这道题的问卷（只取统计需要的字段和题目）。"""
     return list(db[SURVEYS].find(
         {"questions.source.rootId": root_id, "ownerId": owner_id, "status": {"$in": statuses}},
-        {"title": 1, "status": 1, "shortCode": 1, "settings.submissionPolicy": 1, "createdAt": 1,
-         "questions": 1},
+        {"title": 1, "status": 1, "shortCode": 1, "settings.submissionPolicy": 1, "settings.deadline": 1,
+         "createdAt": 1, "questions": 1},
     ).sort("createdAt", -1))
 
 

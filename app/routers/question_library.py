@@ -11,11 +11,12 @@ from app.logic import question_access as access
 from app.logic import survey_state as state
 from app.repositories import users as users_repo
 from app.routers.surveys import survey_url
-from app.schemas.question_library import (GroupVersion, QuestionGroup, QuestionGroupList, CrossItem, CrossOptionCount, CrossOverall, CrossQuestionStats,
-                                          CrossSurveyStats, MergedOptionCount, HistoryNode, QuestionHistory, QuestionVersionCreate,
-                                          QuestionVersionEdit, QuestionVersionList, QuestionVersionOut,
-                                          QuestionUsage, RestoreRequest, SharingOut, SharingResult, SharingUpdate,
-                                          UsageSurvey)
+from app.schemas.question_library import (
+    CrossItem, CrossOptionCount, CrossOverall, CrossQuestionStats, CrossSurveyStats, GroupVersion, HistoryNode,
+    MergedOptionCount, QuestionGroup, QuestionGroupList, QuestionHistory, QuestionUsage, QuestionVersionCreate,
+    QuestionVersionEdit, QuestionVersionList, QuestionVersionOut, RestoreRequest, SharingOut, SharingResult,
+    SharingUpdate, UsageSurvey,
+)
 from app.security import get_current_user, get_database
 from app.services import question_library as service
 from app.services import cross_stats as cross_stats_service
@@ -208,6 +209,7 @@ def get_cross_stats(question_id: str,
         items_total=o.get("items_total"))
     surveys = [CrossSurveyStats(
         survey_id=str(x["survey"]["_id"]), title=x["survey"]["title"], status=x["survey"]["status"],
+        is_expired=state.is_expired(x["survey"]["settings"].get("deadline"), now_utc()),
         url=survey_url(x["survey"]["shortCode"]),
         submission_policy=x["survey"]["settings"]["submissionPolicy"],
         survey_question_id=x["survey_question_id"], question_id=str(x["source"]["questionId"]),

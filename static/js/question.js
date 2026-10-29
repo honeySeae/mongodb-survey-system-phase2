@@ -30,6 +30,7 @@ async function load() {
     return;
   }
   document.title = `${question.title} · 我的题目`;
+  $("stats-link").href = `/questions/${question.id}/stats`;
   renderHead();
   renderPreview();
   renderActions();

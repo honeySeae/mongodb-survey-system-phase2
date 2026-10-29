@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>跨问卷统计 · 问卷</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div class="paper">
+      <div class="paper-head">
+        <div class="head-row">
+          <div>
+            <h1 id="title">加载中…</h1>
+            <div class="meta" id="meta"></div>
+          </div>
+          <a class="btn small ghost" id="back-link" href="/questions">返回题目</a>
+        </div>
+      </div>
+      <div class="paper-body msg-slot" id="message"></div>
+
+      <section id="content" hidden>
+        <div class="paper-body">
+          <div class="muted">统计你自己的、已发布或已关闭的问卷中这道题的回答；每份问卷按它自己的提交策略选取答卷；不显示填写人。</div>
+          <div class="cross-filters" id="filters"></div>
+        </div>
+
+        <div class="paper-section">
+          <h2 class="section-title">合并后的结果</h2>
+          <div class="stat-numbers mt-s" id="totals"></div>
+          <div class="muted mt-s" id="totals-note"></div>
+          <div class="mt" id="overall"></div>
+        </div>
+
+        <div class="paper-section">
+          <h2 class="section-title">各问卷的结果</h2>
+          <div id="surveys"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/static/js/question-stats.js"></script>
+</body>
+</html>

@@ -55,6 +55,12 @@ def question_page(question_id: str):
     return _page("question.html")
 
 
+@router.get("/questions/{question_id}/stats")
+def question_stats_page(question_id: str):
+    """单题跨问卷统计。"""
+    return _page("question-stats.html")
+
+
 @router.get("/banks")
 def banks_page():
     return _page("banks.html")
