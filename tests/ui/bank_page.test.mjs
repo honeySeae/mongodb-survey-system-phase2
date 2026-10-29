@@ -1,6 +1,6 @@
 // 界面测试（第二阶段 10c 题库页）：新建题库、加入题目（我的 / 共享给我的）、同一道题只能加入一次、
 // “有新版本 vN 可换”与换版本、换其他版本（说明改了什么）、共享题库、原作者取消共享后的不可用提示
-// （只对创建者说明原因）、被共享的人只读查看并在问卷编辑页“从题目库添加 → 题库”中选题、
+// （只对创建者说明原因）、被共享的人只读查看并在问卷编辑页“从我的题目添加 → 题库”中选题、
 // 修改名称、移除、删除题库、手机尺寸。
 import { scenario } from "./helpers.mjs";
 
@@ -26,7 +26,7 @@ await scenario("题库页", async (t) => {
   // ---------- 新建题库 ----------
   await b.goto(`${t.base}/banks`);
   await b.waitFor(`document.querySelector("#list .empty")?.textContent.includes("还没有题库")`, "空列表");
-  assert.deepEqual(await t.texts(".topbar nav a"), ["我的问卷", "题目库", "题库"]);
+  assert.deepEqual(await t.texts(".topbar nav a"), ["我的问卷", "我的题目", "题库"]);
   await t.click("#new-btn");
   await t.type("#name", "学生基本信息");
   await t.type("#description", "每学期都用");
@@ -112,7 +112,7 @@ await scenario("题库页", async (t) => {
   const survey = ok(await t.api("POST", "/api/surveys", { title: "bob 的问卷" }, bob), 201);
   await b.goto(`${t.base}/surveys/${survey.id}/edit`);
   await b.waitFor(`document.querySelector("#questions .empty")`, "空问卷");
-  await t.click("#add-bar button", "从题目库添加");
+  await t.click("#add-bar button", "从已有题目添加");
   await b.waitFor(`document.querySelector(".library-picker .seg")`, "面板");
   await t.click(".library-picker .seg button", "题库");
   await b.waitFor(`document.querySelector(".library-picker .pick-bank")?.textContent.includes("学生信息")`, "题库列表");
@@ -120,8 +120,8 @@ await scenario("题库页", async (t) => {
   await b.waitFor(`document.querySelectorAll(".library-picker .pick-bank-items .pick-row").length === 3`, "题库中的题");
   assert.ok((await t.text(".library-picker .pick-bank-items")).includes("这一项不可用"));
   await t.click(".library-picker .pick-bank-items .pick-row button", "添加");
-  await b.waitFor(`document.querySelector("#questions .badge.source")?.textContent === "题目库 v2"`, "从题库添加");
-  t.step("被共享的人在问卷编辑页“从题目库添加 → 题库”中展开题库并添加（未单独共享给他的题也能用）");
+  await b.waitFor(`document.querySelector("#questions .badge.source")?.textContent === "来源 v2"`, "从题库添加");
+  t.step("被共享的人在问卷编辑页“从我的题目添加 → 题库”中展开题库并添加（未单独共享给他的题也能用）");
   await t.shot("从题库选题");
 
   // ---------- 移除、删除 ----------
@@ -146,5 +146,5 @@ await scenario("题库页", async (t) => {
   await b.waitFor(`location.pathname === "/banks"`, "删除后回到列表");
   await b.waitFor(`document.querySelector("#list .empty")`, "题库列表为空");
   assert.equal((await t.api("GET", `/api/questions/${g2.id}`, undefined, alice)).status, 200, "删除题库不影响题目");
-  t.step("手机尺寸下没有横向滚动；删除题库后回到列表，题目库中的题不受影响");
+  t.step("手机尺寸下没有横向滚动；删除题库后回到列表，我的题目中的题不受影响");
 });

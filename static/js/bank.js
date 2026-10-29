@@ -63,8 +63,8 @@ function renderHead() {
   $("head-actions").replaceChildren(...actions);
 
   $("role-note").replaceChildren(bank.isMine
-    ? el("div", { class: "muted", text: "删除题库或移除题目不影响已经使用这些题的问卷，也不影响题目库中的题。" })
-    : el("div", { class: "notice info", text: `这是 ${bank.owner} 的题库：可以在问卷编辑页“从题目库添加 → 题库”中使用这些题，` +
+    ? el("div", { class: "muted", text: "删除题库或移除题目不影响已经使用这些题的问卷，也不影响题目本身。" })
+    : el("div", { class: "notice info", text: `这是 ${bank.owner} 的题库：可以在问卷编辑页“从已有题目添加 → 题库”中使用这些题，` +
         "也可以打开某道题基于它创建自己的新版本；不能修改题库。" }));
 }
 
@@ -91,7 +91,7 @@ $("edit-form").addEventListener("submit", async (event) => {
 });
 
 async function removeBank() {
-  if (!confirm(`确定删除题库「${bank.name}」吗？已经使用其中题目的问卷和题目库中的题都不受影响。`)) return;
+  if (!confirm(`确定删除题库「${bank.name}」吗？已经使用其中题目的问卷和题目本身都不受影响。`)) return;
   try {
     await api("DELETE", `/api/banks/${bank.id}`);
     location.href = "/banks";
@@ -149,7 +149,7 @@ async function switchItem(item, questionId) {
 
 async function removeItem(item) {
   const title = item.question ? `「${item.question.title}」` : "这一项";
-  if (!confirm(`从题库中移除${title}？题目库中的题和已经使用它的问卷都不受影响。`)) return;
+  if (!confirm(`从题库中移除${title}？题目本身和已经使用它的问卷都不受影响。`)) return;
   try {
     update(await api("DELETE", `/api/banks/${bank.id}/items/${item.rootId}`), "已移除");
   } catch (err) {

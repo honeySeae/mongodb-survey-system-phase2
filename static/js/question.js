@@ -29,7 +29,7 @@ async function load() {
       ? { message: "题目不存在，或没有共享给你" } : err));
     return;
   }
-  document.title = `${question.title} · 题目库`;
+  document.title = `${question.title} · 我的题目`;
   renderHead();
   renderPreview();
   renderActions();

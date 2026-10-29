@@ -196,8 +196,8 @@ def _check_library_content_unchanged(old: dict, new: dict, index: int) -> None:
     if _content_without_required(old) != _content_without_required(new):
         raise ValidationFailed([{
             "questionId": old["id"], "field": "source",
-            "message": f"第 {index + 1} 题来自题目库，题目内容和校验不能在问卷里修改，只能修改是否必答和跳转规则；"
-                       "要修改内容，请在题目库中创建新版本后换版本"}], "题目设置不合法")
+            "message": f"第 {index + 1} 题来自已保存的题目，题目内容和校验不能在问卷里修改，只能修改是否必答和跳转规则；"
+                       "要修改内容，请在“我的题目”中创建新版本后换版本"}], "题目设置不合法")
 
 
 def _check_not_in_survey(questions: list[dict], root_id: ObjectId, skip_index: int | None = None) -> None:
@@ -306,4 +306,4 @@ def save_to_library(db: Database, owner_id: ObjectId, survey_id: str, question_i
 
 
 def _already_in_library() -> Conflict:
-    return Conflict("ALREADY_IN_LIBRARY", "这道题来自题目库（或已存入题目库），不能重复存入")
+    return Conflict("ALREADY_IN_LIBRARY", "这道题来自已保存的题目（或已存入“我的题目”），不能重复存入")

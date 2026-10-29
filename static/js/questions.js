@@ -8,7 +8,7 @@ import { TYPE_LABELS } from "./render.js";
 const $ = (id) => document.getElementById(id);
 const PAGE_SIZE = 20;
 const EMPTY_TEXT = {
-  mine: "还没有题目，点击上方“新建题目”，或在问卷编辑页把问卷中的题“存入题目库”",
+  mine: "还没有题目，点击上方“新建题目”，或在问卷编辑页把问卷中的题“存入我的题目”",
   shared: "还没有人把题目共享给你",
   public: "还没有别人公开的题目",
 };
@@ -41,7 +41,7 @@ $("more-btn").addEventListener("click", () => load(false));
 // ---------- 新建 ----------
 $("new-btn").addEventListener("click", () => {
   const editor = createContentEditor({
-    question: null, submitText: "保存到题目库",
+    question: null, submitText: "保存到我的题目",
     onCancel: closeNew,
     async onSubmit(body) {
       editor.setBusy(true);

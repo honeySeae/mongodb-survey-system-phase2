@@ -7,7 +7,7 @@ import { optionSummary, versionBadge } from "./library-common.js";
 import { TYPE_LABELS } from "./render.js";
 
 const PAGE_SIZE = 10;
-const QUESTION_SCOPES = [["mine", "我的题目"], ["shared", "共享给我的"], ["public", "公开的"]];
+const QUESTION_SCOPES = [["mine", "我创建的"], ["shared", "共享给我的"], ["public", "公开的"]];
 
 /**
  * @param {object} opts
@@ -68,7 +68,7 @@ export function createLibraryPicker(opts) {
   }
 
   function emptyText() {
-    return { mine: "题目库中还没有你的题目", shared: "还没有人把题目共享给你", public: "还没有别人公开的题目",
+    return { mine: "你还没有创建题目", shared: "还没有人把题目共享给你", public: "还没有别人公开的题目",
              banks: "还没有可用的题库" }[scope];
   }
 

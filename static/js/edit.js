@@ -218,13 +218,13 @@ function questionTools(q, i) {
     el("button", { class: "btn small link muted", type: "button", text: "删除", onclick: () => removeQuestion(q, i) }),
     q.source
       ? el("button", { class: "btn small link muted", type: "button", text: "换版本", onclick: () => openSwitch(q, i) })
-      : el("button", { class: "btn small link muted", type: "button", text: "存入题目库", onclick: () => saveToLibrary(q) }));
+      : el("button", { class: "btn small link muted", type: "button", text: "存入我的题目", onclick: () => saveToLibrary(q) }));
 }
 
 /** 已发布、已关闭的问卷：问卷中直接建的题仍可以存入题目库（只补来源信息，不改题目内容）。 */
 function libraryTools(q) {
   return el("div", { class: "q-lib-tools" },
-    el("button", { class: "btn small link muted", type: "button", text: "存入题目库", onclick: () => saveToLibrary(q) }));
+    el("button", { class: "btn small link muted", type: "button", text: "存入我的题目", onclick: () => saveToLibrary(q) }));
 }
 
 function renderAddBar() {
@@ -233,7 +233,7 @@ function renderAddBar() {
     bar.append(el("button", { class: "btn small ghost", type: "button", text: `＋ ${TYPE_LABELS[type] || type}`,
                               onclick: () => openEditor("new", type) }));
   }
-  bar.append(el("button", { class: "btn small ghost", type: "button", text: "从题目库添加", onclick: openLibraryPicker }));
+  bar.append(el("button", { class: "btn small ghost", type: "button", text: "从已有题目添加", onclick: openLibraryPicker }));
 }
 
 // ---------- 第二阶段：题目库 ----------
@@ -248,8 +248,8 @@ function openPanel(key, instance) {
 
 function openLibraryPicker() {
   openPanel("library", createLibraryPicker({
-    title: "从题目库添加",
-    intro: "添加的是题目的副本：题目库中的题以后修改（生成新版本）不会影响这份问卷。是否必答、跳转规则在问卷中设置。",
+    title: "从已有题目添加",
+    intro: "添加的是题目的副本：原题以后修改（生成新版本）不会影响这份问卷。是否必答、跳转规则在问卷中设置。",
     usedRoots: new Set(survey.questions.filter((q) => q.source).map((q) => q.source.rootId)),
     usedText: "已在问卷中",
     usedTitle: "同一道题在一份问卷中只能出现一次；要用其他版本请对问卷中的这道题“换版本”",
@@ -293,13 +293,13 @@ function openSwitch(q, i) {
 async function saveToLibrary(q) {
   if (!confirmDiscard()) return;
   const lockNote = editable() ? "存入后，这道题在问卷中只能修改是否必答和跳转规则。" : "题目内容和已收集的答卷都不会改变。";
-  if (!confirm(`把「${q.title}」存入题目库？会生成一道新题 v1，之后可以在其他问卷中使用。${lockNote}`)) return;
+  if (!confirm(`把「${q.title}」存入“我的题目”？会生成一道新题 v1，之后可以在其他问卷中使用。${lockNote}`)) return;
   try {
     const r = await api("POST", `/api/surveys/${survey.id}/questions/${encodeURIComponent(q.id)}/save-to-library`);
     survey = r.survey;
     closeEditor();
     renderAll();
-    toast("已存入题目库（v1）");
+    toast("已存入我的题目（v1）");
   } catch (err) {
     showQuestionsError(err, q.id);
   }

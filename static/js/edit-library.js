@@ -4,10 +4,10 @@ import { api } from "./api.js";
 import { el, errorNotice } from "./layout.js";
 import { diffVersions, versionBadge } from "./library-common.js";
 
-/** 题目来源标签：“题目库 v2”，点击在新标签页打开该版本。 */
+/** 题目来源标签：“来源 v2”，点击在新标签页打开该版本。 */
 export function sourceBadge(q) {
   return el("a", { class: "badge version source", href: `/questions/${q.source.questionId}`, target: "_blank",
-                   title: "这道题来自题目库，点击查看该版本", text: `题目库 v${q.source.version}` });
+                   title: "这道题来自已保存的题目（第 N 版），点击查看该版本", text: `来源 v${q.source.version}` });
 }
 
 /** 问卷中一道来自题目库的题当前的内容（不含是否必答），用于和其他版本比较。 */
@@ -46,7 +46,7 @@ export function createSwitchPanel(opts) {
       .sort((a, b) => b.version - a.version);
     if (!others.length) {
       list.replaceChildren(el("div", { class: "muted" }, "这道题没有其他可用的版本。可以到",
-        el("a", { href: `/questions/${q.source.questionId}`, target: "_blank", text: "题目库" }), "创建新版本。"));
+        el("a", { href: `/questions/${q.source.questionId}`, target: "_blank", text: "题目详情页" }), "创建新版本。"));
       return;
     }
     list.replaceChildren(...others.map((v) => {

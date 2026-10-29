@@ -316,8 +316,8 @@ export function createQuestionEditor(opts) {
       el("div", { class: "editor-head", text: isNew ? `新建第 ${number} 题` : `编辑第 ${number} 题` }),
       errorBox,
       typeNote ? el("div", { class: "notice warn", text: typeNote }) : null,
-      contentLocked ? el("div", { class: "notice info", text: `这道题来自题目库（v${question.source.version}）：` +
-        "题目、选项和校验不能在问卷里修改，只能改是否必答和跳转规则。要修改内容，请在题目库中创建新版本，再在这里“换版本”。" }) : null,
+      contentLocked ? el("div", { class: "notice info", text: `这道题来自已保存的题目（v${question.source.version}）：` +
+        "题目、选项和校验不能在问卷里修改，只能改是否必答和跳转规则。要修改内容，请在“我的题目”中创建新版本，再在这里“换版本”。" }) : null,
       typeAndRequired(), titleRow(), optionsBlock(), validationBlock(), logicBlock(),
       preview,
       el("div", { class: "actions mt" }, saveBtn, cancelBtn)].filter(Boolean));

@@ -1,8 +1,8 @@
-// 界面测试（第二阶段 10a 题目库页）：新建题目、列表、详情与预览、直接修改、创建新版本、
+// 界面测试（第二阶段 10a 我的题目页）：新建题目、列表、详情与预览、直接修改、创建新版本、
 // 版本历史、被问卷使用后锁定、恢复旧版本、共享给别人、被共享的人看到的页面、删除、手机尺寸。
 import { scenario } from "./helpers.mjs";
 
-await scenario("题目库页", async (t) => {
+await scenario("我的题目页", async (t) => {
   const { browser: b, assert } = t;
   const ok = (r, status = 200) => { assert.equal(r.status, status, JSON.stringify(r.body)); return r.body; };
   const detailLoaded = (text) => b.waitFor(`!document.getElementById("content").hidden &&
@@ -15,10 +15,10 @@ await scenario("题目库页", async (t) => {
   // ---------- 新建题目 ----------
   await b.goto(`${t.base}/questions`);
   await b.waitFor(`document.querySelector("#list .empty")?.textContent.includes("还没有题目")`, "空列表提示");
-  assert.deepEqual(await t.texts(".topbar nav a"), ["我的问卷", "题目库", "题库"]);
-  assert.equal(await t.text(".topbar nav a.active"), "题目库");
-  t.step("顶部导航新增“题目库”；空列表时有提示");
-  await t.shot("空的题目库");
+  assert.deepEqual(await t.texts(".topbar nav a"), ["我的问卷", "我的题目", "题库"]);
+  assert.equal(await t.text(".topbar nav a.active"), "我的题目");
+  t.step("顶部导航新增“我的题目”；空列表时有提示");
+  await t.shot("空的我的题目");
 
   await t.click("#new-btn");
   await b.eval(`(() => { const s = document.querySelector("#new-slot select"); s.value = "single_choice";
@@ -28,7 +28,7 @@ await scenario("题目库页", async (t) => {
   await t.type('#new-slot .editor-option:nth-child(2) input', "女");
   assert.deepEqual(await t.texts("#new-slot .editor-preview .option"), ["男", "女"]);
   assert.equal(await b.eval(`document.querySelectorAll("#new-slot input[type=checkbox]").length`), 0,
-    "题目库中没有“必答”勾选框");
+    "我的题目中没有“必答”勾选框");
   t.step("新建题目表单：题型、题目、选项，下方实时预览；没有“必答”和跳转规则");
   await t.shot("新建题目");
   await t.click("#new-slot button[type=submit]");
@@ -144,7 +144,7 @@ await scenario("题目库页", async (t) => {
   await b.waitFor(`location.pathname === "/questions"`, "删除后回到列表");
   await b.waitFor(`document.querySelectorAll("#list .lib-item").length === 1`, "列表剩 1 道题");
   assert.ok(!(await t.texts("#list .lib-item h3 a")).includes("临时题"));
-  t.step("删除未使用的版本后回到题目库列表");
+  t.step("删除未使用的版本后回到我的题目列表");
 
   // ---------- 不存在的题目、手机尺寸 ----------
   await b.goto(`${t.base}/questions/000000000000000000000000`);
