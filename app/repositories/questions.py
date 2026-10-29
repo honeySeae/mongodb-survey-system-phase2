@@ -85,6 +85,13 @@ def in_any_bank(db: Database, question_id: ObjectId) -> bool:
     return db[QUESTION_BANKS].find_one({"items.questionId": question_id}, {"_id": 1}) is not None
 
 
+def lock(db: Database, question_id: ObjectId, now) -> dict | None:
+    """加锁（10.4 第 2 条）：未锁定时置上 lockedAt，已锁定的保持原值；返回加锁后的版本，不存在时返回 None。
+    加锁后内容不会再变（直接修改的条件带 lockedAt: null），调用方用返回的内容复制进问卷。"""
+    db[QUESTIONS].update_one({"_id": question_id, "lockedAt": None}, {"$set": {"lockedAt": now}})
+    return db[QUESTIONS].find_one({"_id": question_id})
+
+
 def delete_unlocked(db: Database, question_id: ObjectId, owner_id: ObjectId) -> bool:
     result = db[QUESTIONS].delete_one({"_id": question_id, "ownerId": owner_id, "lockedAt": None})
     return result.deleted_count == 1

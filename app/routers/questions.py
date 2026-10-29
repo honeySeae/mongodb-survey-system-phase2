@@ -8,7 +8,8 @@ from pydantic import AwareDatetime
 from pymongo.database import Database
 
 from app.routers.surveys import survey_out
-from app.schemas.questions import QuestionCreate, QuestionUpdate, ReorderRequest
+from app.schemas.questions import (LibraryQuestionAdd, QuestionCreate, QuestionUpdate, ReorderRequest,
+                                   SwitchVersionRequest)
 from app.schemas.surveys import SurveyOut
 from app.security import get_current_user, get_database
 from app.services import questions as question_service
@@ -32,6 +33,16 @@ def add(survey_id: str, body: QuestionCreate,
     return survey_out(doc)
 
 
+@router.post("/from-library", response_model=SurveyOut, status_code=201)
+def add_from_library(survey_id: str, body: LibraryQuestionAdd,
+                     expected_updated_at: AwareDatetime | None = ExpectedUpdatedAt,
+                     user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
+    """第二阶段：把题目库中的一个版本复制进问卷（记录 source，版本加锁）；同一道题只能出现一次。"""
+    return survey_out(question_service.add_from_library(
+        db, user["_id"], survey_id, question_id=body.question_id, required=body.required,
+        position=body.position, expected_updated_at=expected_updated_at))
+
+
 # 注意：/order 必须在 /{question_id} 之前声明，否则 "order" 会被当成题目 id
 @router.put("/order", response_model=SurveyOut)
 def reorder(survey_id: str, body: ReorderRequest,
@@ -52,6 +63,16 @@ def update(survey_id: str, question_id: str, body: QuestionUpdate,
         options=[o.model_dump() for o in body.options] if body.options is not None else None,
         validation=body.validation, logic=body.logic, expected_updated_at=expected_updated_at)
     return survey_out(doc)
+
+
+@router.put("/{question_id}/version", response_model=SurveyOut)
+def switch_version(survey_id: str, question_id: str, body: SwitchVersionRequest,
+                   expected_updated_at: AwareDatetime | None = ExpectedUpdatedAt,
+                   user: dict = Depends(get_current_user), db: Database = Depends(get_database)):
+    """第二阶段：来自题目库的题换成同一道题的另一个版本（保留题目 id、是否必答、跳转规则）。"""
+    return survey_out(question_service.switch_version(
+        db, user["_id"], survey_id, question_id, version_id=body.question_id,
+        expected_updated_at=expected_updated_at))
 
 
 @router.delete("/{question_id}", response_model=SurveyOut)

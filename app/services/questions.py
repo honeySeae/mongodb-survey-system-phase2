@@ -6,7 +6,15 @@
 - 添加题目时不接受跳转规则；修改题目时整体替换，保留的选项带原 id
 - 写回时带上读取时的 updatedAt 做条件更新，防止并发修改互相覆盖；
   请求可选带 expectedUpdatedAt，带了就与当前值比较
+
+第二阶段（设计文档 10.3、10.5）：
+- 题目可以带 source（来自题目库的某个版本）。没有 source 的题（第一阶段的题、在问卷中直接新建的题）
+  所有行为与第一阶段完全相同
+- 有 source 的题：内容和校验是来源版本的副本，修改题目时只能改 validation.required 和跳转规则
+- 从题目库添加、换版本：先给版本加锁再复制；同一道题（同一 rootId）在一份问卷中只能出现一次；
+  副本沿用来源版本的选项 id，与问卷中其他 id 重复时拒绝
 """
+import copy
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -16,8 +24,9 @@ from pymongo.database import Database
 
 from app.errors import Conflict, NotFound, ValidationFailed
 from app.logic import survey_state as state
-from app.logic.survey_check import check_survey, find_references
+from app.logic.survey_check import MAX_QUESTIONS, check_survey, find_references
 from app.repositories import surveys as surveys_repo
+from app.services import question_library as library
 from app.services.surveys import get_owned
 from app.utils import now_utc, to_mongo_time
 
@@ -143,6 +152,11 @@ def update_question(db: Database, owner_id: ObjectId, survey_id: str, question_i
                              "defaultNext": logic.get("defaultNext"),
                              **{k: v for k, v in logic.items() if k not in ("rules", "defaultNext")}}
 
+    if "source" in questions[i]:
+        # 第二阶段：来自题目库的题只能改是否必答和跳转规则（没有 source 的题不经过这里）
+        _check_library_content_unchanged(questions[i], question, i)
+        question["source"] = questions[i]["source"]
+
     questions[i] = question
     return _save(db, owner_id, survey, questions)
 
@@ -169,3 +183,94 @@ def reorder_questions(db: Database, owner_id: ObjectId, survey_id: str, question
         raise ValidationFailed([{"field": "questionIds",
                                  "message": "必须恰好包含问卷的全部题目 id，且不能重复"}])
     return _save(db, owner_id, survey, [by_id[qid] for qid in question_ids])
+
+
+# ---------- 第二阶段：使用题目库中的题（设计文档 10.5） ----------
+def _content_without_required(q: dict) -> dict:
+    content = {k: q.get(k) for k in ("type", "title", "options")}
+    content["validation"] = {k: v for k, v in (q.get("validation") or {}).items() if k != "required"}
+    return content
+
+
+def _check_library_content_unchanged(old: dict, new: dict, index: int) -> None:
+    if _content_without_required(old) != _content_without_required(new):
+        raise ValidationFailed([{
+            "questionId": old["id"], "field": "source",
+            "message": f"第 {index + 1} 题来自题目库，题目内容和校验不能在问卷里修改，只能修改是否必答和跳转规则；"
+                       "要修改内容，请在题目库中创建新版本后换版本"}], "题目设置不合法")
+
+
+def _check_not_in_survey(questions: list[dict], root_id: ObjectId, skip_index: int | None = None) -> None:
+    for k, q in enumerate(questions):
+        if k != skip_index and (q.get("source") or {}).get("rootId") == root_id:
+            raise Conflict("QUESTION_ALREADY_IN_SURVEY",
+                           f"这道题已经在问卷中（第 {k + 1} 题），同一道题在一份问卷中只能出现一次")
+
+
+def _check_option_ids_free(version: dict, used: set[str]) -> None:
+    clash = [o["id"] for o in version.get("options") or [] if o["id"] in used]
+    if clash:
+        raise Conflict("OPTION_ID_CONFLICT",
+                       f"这道题的选项 id {', '.join(clash)} 与问卷中其他题目的 id 重复，无法添加")
+
+
+def _library_question(qid: str, version: dict, required: bool, logic: dict | None) -> dict:
+    """由加锁后的版本生成问卷中的题目：内容是副本，required 和 logic 由问卷决定。"""
+    content = copy.deepcopy(library.snapshot(version))
+    question = {"id": qid, **content, "validation": {**content["validation"], "required": required}}
+    if logic is not None:
+        question["logic"] = logic
+    question["source"] = library.source_of(version)
+    return question
+
+
+def add_from_library(db: Database, owner_id: ObjectId, survey_id: str, *, question_id: str,
+                     required: bool, position: int | None,
+                     expected_updated_at: datetime | None = None) -> dict:
+    """把一个可访问的题目版本复制进草稿问卷（跳转规则添加后再设，与第一阶段添加题目一致）。"""
+    survey = _load_editable(db, owner_id, survey_id, expected_updated_at)
+    questions = list(survey["questions"])
+    if position is not None and not 1 <= position <= len(questions) + 1:
+        raise ValidationFailed([{"field": "position",
+                                 "message": f"position 应为 1~{len(questions) + 1}"}])
+    if len(questions) >= MAX_QUESTIONS:
+        # 提前检查，避免为一次注定失败的添加给版本加锁
+        raise ValidationFailed([{"questionId": None, "field": "questions",
+                                 "message": f"每份问卷最多 {MAX_QUESTIONS} 道题"}], "题目设置不合法")
+    version = library.get_accessible(db, owner_id, question_id)
+    _check_not_in_survey(questions, version["rootId"])
+
+    version = library.lock_for_use(db, owner_id, question_id)
+    used = _used_ids(questions)
+    _check_option_ids_free(version, used)
+    used.update(o["id"] for o in version.get("options") or [])
+    question = _library_question(new_id("q_", used), version, required, None)
+
+    index = len(questions) if position is None else position - 1
+    questions.insert(index, question)
+    return _save(db, owner_id, survey, questions)
+
+
+def switch_version(db: Database, owner_id: ObjectId, survey_id: str, question_id: str, *,
+                   version_id: str, expected_updated_at: datetime | None = None) -> dict:
+    """草稿中来自题目库的题换成同一道题的另一个版本：保留题目 id、是否必答、跳转规则（10.5）。
+    规则引用的选项在新版本中不存在时，整体检查会拒绝并指出是哪条规则。"""
+    survey = _load_editable(db, owner_id, survey_id, expected_updated_at)
+    questions = list(survey["questions"])
+    i = _find_index(survey, question_id)
+    old = questions[i]
+    if "source" not in old:
+        raise Conflict("NOT_FROM_LIBRARY", "这道题是在问卷中直接创建的，没有来源版本，不能换版本")
+    target = library.get_accessible(db, owner_id, version_id)
+    if target["rootId"] != old["source"]["rootId"]:
+        raise ValidationFailed([{"questionId": question_id, "field": "questionId",
+                                 "message": "只能换成同一道题的其他版本；要用另一道题，请删除后重新添加"}])
+    if target["_id"] == old["source"]["questionId"]:
+        return survey  # 已经是这个版本
+
+    version = library.lock_for_use(db, owner_id, version_id)
+    others = questions[:i] + questions[i + 1:]
+    _check_option_ids_free(version, _used_ids(others) | {question_id})
+    questions[i] = _library_question(question_id, version, old["validation"].get("required", False),
+                                     old.get("logic"))
+    return _save(db, owner_id, survey, questions)

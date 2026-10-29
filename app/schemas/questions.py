@@ -5,7 +5,7 @@
 """
 from typing import Any
 
-from pydantic import ConfigDict, StrictInt
+from pydantic import ConfigDict, StrictBool, StrictInt
 
 from app.schemas.common import CamelModel
 
@@ -45,3 +45,16 @@ class QuestionUpdate(StrictCamelModel):
 
 class ReorderRequest(StrictCamelModel):
     question_ids: list[str]
+
+
+# ---------- 第二阶段：使用题目库中的题（设计文档 10.5） ----------
+class LibraryQuestionAdd(StrictCamelModel):
+    """从题目库添加：question_id 为题目版本的 id。跳转规则添加后通过修改题目设置。"""
+    question_id: str
+    required: StrictBool = False
+    position: StrictInt | None = None
+
+
+class SwitchVersionRequest(StrictCamelModel):
+    """换成同一道题的另一个版本：question_id 为目标版本的 id。"""
+    question_id: str

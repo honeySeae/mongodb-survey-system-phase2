@@ -37,9 +37,18 @@ def _common_fields(doc: dict) -> dict:
     )
 
 
+def question_out(q: dict) -> dict:
+    """创建者看到的题目。第二阶段：source 中的 ObjectId 转为字符串；没有 source 的题原样返回（与第一阶段相同）。"""
+    if "source" not in q:
+        return q
+    s = q["source"]
+    return {**q, "source": {"questionId": str(s["questionId"]), "rootId": str(s["rootId"]),
+                            "version": s["version"]}}
+
+
 def survey_out(doc: dict) -> SurveyOut:
     return SurveyOut(**_common_fields(doc), description=doc.get("description", ""),
-                     version=doc["version"], questions=doc["questions"],
+                     version=doc["version"], questions=[question_out(q) for q in doc["questions"]],
                      warnings=check_survey(doc["questions"]).warnings)
 
 

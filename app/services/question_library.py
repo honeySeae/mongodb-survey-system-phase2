@@ -199,6 +199,33 @@ def restore_version(db: Database, user_id: ObjectId, question_id: str, parent_id
                            restored_from=source["_id"])
 
 
+# ---------- 加进问卷前加锁（10.4 第 2 条、10.5） ----------
+def lock_for_use(db: Database, user_id: ObjectId, question_id: str) -> dict:
+    """取一个可访问的版本并加锁，返回加锁后的版本（内容从此不再变化，可以复制进问卷）。
+
+    先加锁再复制：与“直接修改”同时发生时，要么修改先完成（复制的是修改后的内容），
+    要么加锁先完成（修改因 lockedAt 条件失败），问卷里的副本一定与版本内容一致。
+    """
+    doc = get_accessible(db, user_id, question_id)
+    locked = questions_repo.lock(db, doc["_id"], now_utc())
+    if locked is None:  # 期间被删除
+        raise _not_found()
+    return locked
+
+
+SNAPSHOT_FIELDS = ("type", "title", "options", "validation")
+
+
+def snapshot(doc: dict) -> dict:
+    """版本内容的副本（复制进问卷的部分），不含版本信息和共享设置。"""
+    return {k: doc[k] for k in SNAPSHOT_FIELDS if k in doc}
+
+
+def source_of(doc: dict) -> dict:
+    """问卷题目的 source 字段（10.3）。"""
+    return {"questionId": doc["_id"], "rootId": doc["rootId"], "version": doc["version"]}
+
+
 # ---------- 共享（10.6） ----------
 SHARE_USERS_MAX = 100
 
