@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>题目详情 · 问卷</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div class="paper">
+      <div class="paper-head">
+        <div class="head-row">
+          <div>
+            <h1 id="title">加载中…</h1>
+            <div class="meta" id="meta"></div>
+          </div>
+          <a class="btn small ghost" href="/questions">返回题目库</a>
+        </div>
+      </div>
+      <div class="paper-body msg-slot" id="message"></div>
+
+      <section id="content" hidden>
+        <div class="paper-body">
+          <div id="state-note"></div>
+          <div id="preview" class="lib-preview"></div>
+          <div class="actions mt" id="actions"></div>
+          <div id="editor-slot"></div>
+        </div>
+
+        <div class="paper-section">
+          <h2 class="section-title">版本历史</h2>
+          <div class="muted">按“从哪个版本改来”排列；同一道题的不同版本可以同时存在，不同问卷可以使用不同版本</div>
+          <div id="history" class="history"></div>
+        </div>
+
+        <div class="paper-section">
+          <h2 class="section-title">被哪些问卷使用</h2>
+          <div class="seg" id="usage-scope" role="tablist">
+            <button type="button" data-scope="version" class="active">这个版本</button>
+            <button type="button" data-scope="question">整道题（所有版本）</button>
+          </div>
+          <div id="usage"></div>
+        </div>
+
+        <div class="paper-section" id="sharing-section" hidden>
+          <h2 class="section-title">共享设置</h2>
+          <div class="muted">以整道题为单位：同时作用于你在这道题下的所有版本。别人可以使用、基于它创建自己的新版本，但不能修改你的版本。</div>
+          <form id="sharing-form" class="mt-s" novalidate>
+            <div id="sharing-message"></div>
+            <div class="field" id="public-group">
+              <label class="option checkbox">
+                <input type="checkbox" id="sharing-public"><span class="mark"></span>
+                <span>公开 <span class="muted">所有登录用户都可以使用</span></span>
+              </label>
+            </div>
+            <div class="field">
+              <label for="sharing-users">共享给指定用户</label>
+              <textarea class="input" id="sharing-users" rows="2" placeholder="填写用户名，多个用逗号或换行分隔"></textarea>
+            </div>
+            <button class="btn small" type="submit" id="sharing-save">保存共享设置</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/static/js/question.js"></script>
+</body>
+</html>

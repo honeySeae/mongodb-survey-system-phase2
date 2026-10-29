@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>题目库 · 问卷</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div class="paper">
+      <div class="paper-head">
+        <div class="head-row">
+          <div>
+            <h1>题目库</h1>
+            <div class="desc">保存常用题目，在多份问卷中重复使用；修改题目会生成新版本，不影响已有问卷</div>
+          </div>
+          <button class="btn" type="button" id="new-btn">＋ 新建题目</button>
+        </div>
+      </div>
+
+      <!-- 点击“新建题目”后才展开 -->
+      <section id="new-section" class="new-form" hidden>
+        <div class="editor-head">新建题目</div>
+        <div id="new-slot"></div>
+      </section>
+
+      <div class="tabs" role="tablist" id="tabs">
+        <button type="button" role="tab" data-scope="mine" class="active">我的题目</button>
+        <button type="button" role="tab" data-scope="shared">共享给我的</button>
+        <button type="button" role="tab" data-scope="public">公开的</button>
+      </div>
+      <div class="paper-body"><div class="muted" id="summary"></div></div>
+      <div id="list"><div class="empty">加载中…</div></div>
+      <div class="load-more"><button class="btn small ghost" type="button" id="more-btn" hidden>加载更多</button></div>
+    </div>
+  </main>
+  <script type="module" src="/static/js/questions.js"></script>
+</body>
+</html>

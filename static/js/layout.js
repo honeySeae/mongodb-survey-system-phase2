@@ -26,13 +26,14 @@ export function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-/** 顶部导航：品牌、我的问卷、当前用户和退出。 */
+/** 顶部导航：品牌、我的问卷、题目库（第二阶段）、当前用户和退出。 */
 export function renderTopbar(active = "") {
   const user = getUser();
   const bar = el("header", { class: "topbar" },
     el("a", { class: "brand", href: "/surveys", text: "问卷" }),
     el("nav", {},
       el("a", { href: "/surveys", class: active === "surveys" ? "active" : null, text: "我的问卷" }),
+      el("a", { href: "/questions", class: active === "questions" ? "active" : null, text: "题目库" }),
     ),
     user
       ? el("div", { class: "user" },

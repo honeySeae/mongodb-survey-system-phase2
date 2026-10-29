@@ -44,6 +44,17 @@ def stats_page(survey_id: str):
     return _page("stats.html")
 
 
+# ---------- 第二阶段：题目库 ----------
+@router.get("/questions")
+def questions_page():
+    return _page("questions.html")
+
+
+@router.get("/questions/{question_id}")
+def question_page(question_id: str):
+    return _page("question.html")
+
+
 @router.get("/survey/{short_code}")
 def fill_page(short_code: str):
     """问卷分发链接：<PUBLIC_BASE_URL>/survey/<shortCode>。"""

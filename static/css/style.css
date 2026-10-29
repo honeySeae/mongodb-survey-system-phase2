@@ -334,6 +334,29 @@ select:focus { border-color: var(--primary); }
 .center { text-align: center; }
 .mt { margin-top: 14px; }
 
+/* ---------- 第二阶段：题目库 ---------- */
+.badge.version { color: var(--primary); border-color: var(--primary-line); font-variant-numeric: tabular-nums; }
+.section-title { font-size: 17px; margin-bottom: 2px; }
+.mt-s { margin-top: 8px; }
+.lib-options { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+.library-editor { margin-top: 6px; }
+.library-editor .editor-preview .question { padding-left: 0; }
+/* 详情页的题目预览：已在 paper-body 的内边距中，题目本身不再缩进 */
+.lib-preview .question { padding: 6px 0 4px; border: none; }
+/* 版本历史：按父子关系缩进的树 */
+.history { margin-top: 8px; display: flex; flex-direction: column; }
+.history-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 6px;
+               background: var(--paper); border-bottom: 1px dotted var(--rule); }
+.history-row.current { background: var(--primary-tint); }
+.history-branch { color: var(--ink-faint); font-family: var(--font-serif); }
+/* 小型分段切换（如“这个版本 / 整道题”） */
+.seg { display: inline-flex; margin: 8px 0 4px; border: 1px solid var(--primary-line); border-radius: var(--radius); overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 2px 12px; border: none; background: var(--paper); color: var(--ink-soft); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--primary-line); }
+.seg button.active { background: var(--primary-tint); color: var(--primary-dark); }
+.usage-item { padding: 8px 0 2px; border-bottom: 1px dashed var(--rule); }
+.usage-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+
 /* ---------- 手机 ---------- */
 @media (max-width: 600px) {
   .page { padding: 0 0 40px; }
